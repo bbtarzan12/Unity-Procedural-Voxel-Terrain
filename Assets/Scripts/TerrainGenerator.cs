@@ -1,67 +1,73 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using OptIn.Voxel;
+using Priority_Queue;
 using UnityEngine;
 
 public class TerrainGenerator : MonoBehaviour
 {
     [SerializeField] Transform target;
-    [SerializeField] Vector3Int chunkSize = new Vector3Int(32, 32, 32);
+    [SerializeField] int chunkSize = 32;
     [SerializeField] Vector3Int chunkSpawnSize = Vector3Int.one * 3;
     [SerializeField] Material chunkMaterial;
-    [SerializeField] bool enableJob;
     [SerializeField] int maxGenerateChunksInFrame = 5;
-    [SerializeField] int maxUpdateChunksInFrame = 5;
     
     Dictionary<Vector3Int, Chunk> chunks = new Dictionary<Vector3Int, Chunk>();
     Vector3Int lastTargetChunkPosition = new Vector3Int(int.MinValue, int.MaxValue, int.MinValue);
-    HashSet<Vector3Int> generateChunkSet = new HashSet<Vector3Int>();
-    Queue<Vector3Int> generateChunkQueue = new Queue<Vector3Int>();
-    Queue<Chunk> updateChunkQueue = new Queue<Chunk>();
+    SimplePriorityQueue<Vector3Int> generateChunkQueue = new SimplePriorityQueue<Vector3Int>();
     
-    public Vector3Int ChunkSize => chunkSize;
-    public bool EnableJob => enableJob;
+    public int ChunkSize => chunkSize;
     public Material ChunkMaterial => chunkMaterial;
 
     void Update()
     {
         GenerateChunkByTargetPosition();
         UpdateChunkMesh();
-        
-        ProcessGenerateChunkQueue();
-        ProcessUpdateChunkQueue();
     }
-    
+
+    void LateUpdate()
+    {
+        ProcessGenerateChunkQueue();
+    }
+
     void GenerateChunkByTargetPosition()
     {
         if (target == null)
             return;
         
-        Vector3Int chunkPosition = VoxelHelper.WorldToChunk(target.position, chunkSize);
+        Vector3Int targetPosition = VoxelHelper.WorldToChunk(target.position, chunkSize);
 
-        if (lastTargetChunkPosition == chunkPosition)
+        if (lastTargetChunkPosition == targetPosition)
             return;
 
-        for (int x = chunkPosition.x - chunkSpawnSize.x; x <= chunkPosition.x + chunkSpawnSize.x; x++)
+        foreach (Vector3Int chunkPosition in generateChunkQueue)
         {
-            for (int y = chunkPosition.y - chunkSpawnSize.y; y <= chunkPosition.y + chunkSpawnSize.y; y++)
+            Vector3Int deltaPosition = targetPosition - chunkPosition;
+            if (chunkSpawnSize.x < Mathf.Abs(deltaPosition.x) || chunkSpawnSize.y < Mathf.Abs(deltaPosition.y) || chunkSpawnSize.z < Mathf.Abs(deltaPosition.z))
             {
-                for (int z = chunkPosition.z - chunkSpawnSize.z; z <= chunkPosition.z + chunkSpawnSize.z; z++)
+                generateChunkQueue.Remove(chunkPosition);
+                continue;
+            }
+            
+            generateChunkQueue.UpdatePriority(chunkPosition, (targetPosition - chunkPosition).sqrMagnitude);
+        }
+
+        for (int x = targetPosition.x - chunkSpawnSize.x; x <= targetPosition.x + chunkSpawnSize.x; x++)
+        {
+            for (int y = targetPosition.y - chunkSpawnSize.y; y <= targetPosition.y + chunkSpawnSize.y; y++)
+            {
+                for (int z = targetPosition.z - chunkSpawnSize.z; z <= targetPosition.z + chunkSpawnSize.z; z++)
                 {
-                    Vector3Int newChunkPosition = new Vector3Int(x, y, z);
-                    if (chunks.ContainsKey(newChunkPosition))
+                    Vector3Int chunkPosition = new Vector3Int(x, y, z);
+                    if (chunks.ContainsKey(chunkPosition))
                         continue;
                     
-                    if(generateChunkSet.Contains(newChunkPosition))
-                        continue;
-                    
-                    generateChunkQueue.Enqueue(newChunkPosition);
-                    generateChunkSet.Add(newChunkPosition);
+                    generateChunkQueue.EnqueueWithoutDuplicates(chunkPosition, (targetPosition - chunkPosition).sqrMagnitude);
                 }
             }
         }
 
-        lastTargetChunkPosition = chunkPosition;
+        lastTargetChunkPosition = targetPosition;
     }
     
     void UpdateChunkMesh()
@@ -71,7 +77,7 @@ public class TerrainGenerator : MonoBehaviour
             if (!chunk.Dirty)
                 continue;
 
-            updateChunkQueue.Enqueue(chunk);
+            chunk.UpdateMesh();
         }
     }
 
@@ -85,24 +91,10 @@ public class TerrainGenerator : MonoBehaviour
 
             Vector3Int chunkPosition = generateChunkQueue.Dequeue();
             GenerateChunk(chunkPosition);
-            generateChunkSet.Remove(chunkPosition);
             numChunks++;
         }
     }
-    
-    void ProcessUpdateChunkQueue()
-    {
-        int numChunks = 0;
-        while (updateChunkQueue.Count != 0)
-        {
-            if (numChunks >= maxUpdateChunksInFrame)
-                return;
-            
-            Chunk chunk = updateChunkQueue.Dequeue();
-            chunk.UpdateMesh();
-        }
-    }
-    
+
     Chunk GenerateChunk(Vector3Int chunkPosition)
     {
         if (chunks.ContainsKey(chunkPosition))
@@ -113,7 +105,7 @@ public class TerrainGenerator : MonoBehaviour
         chunkGameObject.transform.position = VoxelHelper.ChunkToWorld(chunkPosition, chunkSize);
 
         Chunk newChunk = chunkGameObject.AddComponent<Chunk>();
-        newChunk.Init(chunkPosition, this);
+        StartCoroutine(newChunk.Init(chunkPosition, this));
 
         chunks.Add(chunkPosition, newChunk);
         return newChunk;

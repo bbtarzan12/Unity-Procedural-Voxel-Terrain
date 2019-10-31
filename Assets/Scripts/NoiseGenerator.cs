@@ -8,20 +8,6 @@ using UnityEngine;
 
 public static class NoiseGenerator
 {
-
-    class NoiseGeneratorHelper : Singleton<NoiseGeneratorHelper>
-    {
-        public void Init()
-        {
-            Debug.Log($"Init {nameof(NoiseGeneratorHelper)} for Automatic Dispose of NativeArray");
-        }
-            
-        void OnDestroy()
-        {
-            Dispose();
-        }
-    }
-
     static void RandomVoxel(out Voxel voxel, Vector3Int worldPosition)
     {
         voxel = new Voxel();
@@ -38,7 +24,7 @@ public static class NoiseGenerator
     struct GenerateNoiseJob : IJobParallelFor
     {
         [ReadOnly] public Vector3Int chunkPosition;
-        [ReadOnly] public Vector3Int chunkSize;
+        [ReadOnly] public int chunkSize;
         
         [WriteOnly] public NativeArray<Voxel> voxels;
 
@@ -50,63 +36,15 @@ public static class NoiseGenerator
             voxels[index] = voxel;
         }
     }
-
-    static NativeArray<Voxel> nativeVoxels;
-
-    static bool isInitialized = false;
-
-    static void Initialize(Vector3Int chunkSize)
+    
+    public static JobHandle Generate(NativeArray<Voxel>voxels, Vector3Int chunkPosition, int chunkSize)
     {
-        if (isInitialized)
-            return;
-        
-        nativeVoxels = new NativeArray<Voxel>(chunkSize.x * chunkSize.y * chunkSize.z, Allocator.Persistent);
+        GenerateNoiseJob noiseJob = new GenerateNoiseJob {chunkPosition = chunkPosition, chunkSize = chunkSize, voxels = voxels};
+        JobHandle noiseJobHandle = noiseJob.Schedule(voxels.Length, 32);
+        JobHandle.ScheduleBatchedJobs();
 
-        NoiseGeneratorHelper.Instance.Init();
-        
-        isInitialized = true;
+        return noiseJobHandle;
     }
-
-    static void Dispose()
-    {
-        nativeVoxels.Dispose();
-    }
-
-    public static void Generate(Voxel[,,] voxels, Vector3Int chunkPosition, Vector3Int chunkSize, bool enableJob)
-    {
-        if (enableJob)
-        {
-            if(!isInitialized)
-                Initialize(chunkSize);
-            
-            GenerateNoiseJob noiseJob = new GenerateNoiseJob
-            {
-                chunkPosition = chunkPosition,
-                chunkSize = chunkSize,
-                voxels = nativeVoxels
-            };
-
-            JobHandle noiseJobHandle = noiseJob.Schedule(nativeVoxels.Length, 32);
-            noiseJobHandle.Complete();
-            
-            voxels.NativeToManaged(nativeVoxels);
-        }
-        else
-        {
-            for (int x = 0; x < chunkSize.x; x++)
-            {
-                for (int y = 0; y < chunkSize.y; y++)
-                {
-                    for (int z = 0; z < chunkSize.z; z++)
-                    {
-                        Vector3Int gridPosition = new Vector3Int(x, y, z);
-                        Vector3Int worldPosition = gridPosition + chunkPosition * chunkSize;
-                        RandomVoxel(out Voxel voxel, worldPosition);
-                        voxels[x, y, z] = voxel;
-                    }
-                }
-            }
-        }
-    }
+    
     
 }

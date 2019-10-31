@@ -1,7 +1,7 @@
-﻿// Simplex Noise for C#
+﻿// Simplex NoiseNode for C#
 // Copyright © Benjamin Ward 2019
 // See LICENSE
-// Simplex Noise implementation offering 1D, 2D, and 3D forms w/ values in the range of 0 to 255.
+// Simplex NoiseNode implementation offering 1D, 2D, and 3D forms w/ values in the range of 0 to 255.
 // Based on work by Heikki Törmälä (2012) and Stefan Gustavson (2006).
 
 using System;
@@ -14,6 +14,16 @@ namespace SimplexNoise
     /// </summary>
     public static class Noise
     {
+
+        public enum Type
+        {
+            Normal1D,
+            Normal2D,
+            Normal3D,
+            Fractal1D,
+            Fractal2D,
+            Fractal3D
+        }
         
         public static float CalcPixel1DFractal(float x, float frequency, int octaves, float amplitude = 1.0f, float lacunarity = 2.0f, float persistence = 0.5f)
         {
@@ -115,7 +125,7 @@ namespace SimplexNoise
             const float F2 = 0.366025403f; // F2 = 0.5*(sqrt(3.0)-1.0)
             const float G2 = 0.211324865f; // G2 = (3.0-Math.sqrt(3.0))/6.0
 
-            float n0, n1, n2; // Noise contributions from the three corners
+            float n0, n1, n2; // NoiseNode contributions from the three corners
 
             // Skew the input space to determine which simplex cell we're in
             var s = (x + y) * F2; // Hairy factor for 2D
@@ -186,7 +196,7 @@ namespace SimplexNoise
             const float F3 = 0.333333333f;
             const float G3 = 0.166666667f;
 
-            float n0, n1, n2, n3; // Noise contributions from the four corners
+            float n0, n1, n2, n3; // NoiseNode contributions from the four corners
 
             // Skew the input space to determine which simplex cell we're in
             var s = (x + y + z) * F3; // Very nice and simple skew factor for 3D

@@ -1,6 +1,9 @@
-﻿using System.Collections;
+﻿﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using OptIn.Voxel;
+using Unity.Collections;
+using Unity.Jobs;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -10,9 +13,10 @@ using UnityEngine.Rendering;
 public class Chunk : MonoBehaviour
 {
     TerrainGenerator generator;
-    Voxel[,,] voxels;
     Vector3Int chunkPosition;
     bool dirty;
+    bool isUpdating;
+    NativeArray<Voxel> voxels;
 
     List<Vector3> vertices = new List<Vector3>();
     List<Vector3> normals = new List<Vector3>();
@@ -24,10 +28,11 @@ public class Chunk : MonoBehaviour
     MeshRenderer meshRenderer;
     MeshCollider meshCollider;
 
+    VoxelGenerator.NativeVoxelData data;
+    JobHandle noiseJobHandle;
+
     public bool Dirty => dirty;
-    
-    
-    
+
     void Awake()
     {
         meshFilter = GetComponent<MeshFilter>();
@@ -35,30 +40,40 @@ public class Chunk : MonoBehaviour
         meshCollider = GetComponent<MeshCollider>();
         mesh = new Mesh {indexFormat = IndexFormat.UInt32};
     }
-    
+
+    void OnDestroy()
+    {
+        noiseJobHandle.Complete();
+        data?.jobHandle.Complete();
+        data?.Dispose();
+        voxels.Dispose();
+    }
+
     void Start()
     {
         meshFilter.mesh = mesh;
     }
-
-    public void Init(Vector3Int position, TerrainGenerator parent)
+    
+    public IEnumerator Init(Vector3Int position, TerrainGenerator parent)
     {
         chunkPosition = position;
         generator = parent;
 
         meshRenderer.material = generator.ChunkMaterial;
         
-        voxels = new Voxel[generator.ChunkSize.x, generator.ChunkSize.y, generator.ChunkSize.z];
-        NoiseGenerator.Generate(voxels, chunkPosition, generator.ChunkSize, generator.EnableJob);
+        voxels = new NativeArray<Voxel>(generator.ChunkSize * generator.ChunkSize * generator.ChunkSize, Allocator.Persistent);
+        noiseJobHandle = NoiseGenerator.Generate(voxels, chunkPosition, generator.ChunkSize);
+        yield return new WaitUntil(() => noiseJobHandle.IsCompleted);
+        noiseJobHandle.Complete();
         dirty = true;
     }
 
-    public void UpdateMesh()
+    void LateUpdate()
     {
-        if (dirty == false)
+        if (isUpdating == false)
             return;
-        
-        VoxelGenerator.GenerateByCulling(voxels, generator.ChunkSize, generator.EnableJob, vertices, normals, triangles);
+
+        VoxelGenerator.CompleteCullingJob(data, vertices, normals, triangles);
 
         mesh.Clear();
         mesh.SetVertices(vertices);
@@ -69,6 +84,18 @@ public class Chunk : MonoBehaviour
         
         //meshCollider.sharedMesh = mesh;
 
+        data = null;
+        isUpdating = false;
+    }
+
+    public void UpdateMesh()
+    {
+        if (dirty == false)
+            return;
+        
+        data = VoxelGenerator.ScheduleCullingJob(voxels, generator.ChunkSize);
+
+        isUpdating = true;
         dirty = false;
     }
 }
