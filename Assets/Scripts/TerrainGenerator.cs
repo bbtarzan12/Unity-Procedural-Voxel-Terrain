@@ -11,6 +11,7 @@ public class TerrainGenerator : MonoBehaviour
     [SerializeField] Vector3Int chunkSpawnSize = Vector3Int.one * 3;
     [SerializeField] Material chunkMaterial;
     [SerializeField] int maxGenerateChunksInFrame = 5;
+    [SerializeField] VoxelGenerator.SimplifyingMethod simplifyingMethod;
     
     Dictionary<Vector3Int, Chunk> chunks = new Dictionary<Vector3Int, Chunk>();
     Vector3Int lastTargetChunkPosition = new Vector3Int(int.MinValue, int.MaxValue, int.MinValue);
@@ -18,6 +19,7 @@ public class TerrainGenerator : MonoBehaviour
     
     public int ChunkSize => chunkSize;
     public Material ChunkMaterial => chunkMaterial;
+    public VoxelGenerator.SimplifyingMethod SimplifyingMethod => simplifyingMethod;
 
     void Update()
     {

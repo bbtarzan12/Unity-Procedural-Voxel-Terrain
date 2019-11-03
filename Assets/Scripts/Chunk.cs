@@ -92,11 +92,9 @@ public class Chunk : MonoBehaviour
     {
         if (dirty == false)
             return;
-        
-        //data = VoxelGenerator.ScheduleCullingJob(voxels, generator.ChunkSize);
-        //data = VoxelGenerator.ScheduleGreedyOnlyHeightJob(voxels, generator.ChunkSize); 
-        data = VoxelGenerator.ScheduleGreedyJob(voxels, generator.ChunkSize);
 
+        data = VoxelGenerator.ScheduleMeshingJob(voxels, generator.ChunkSize, generator.SimplifyingMethod);
+        
         isUpdating = true;
         dirty = false;
     }

@@ -258,9 +258,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   target: {fileID: 1307539532}
   chunkSize: 32
-  chunkSpawnSize: {x: 7, y: 2, z: 7}
+  chunkSpawnSize: {x: 3, y: 2, z: 3}
   chunkMaterial: {fileID: 2100000, guid: 0fbb6114864c2014b87fc493434a98af, type: 2}
   maxGenerateChunksInFrame: 3
+  simplifyingMethod: 3
 --- !u!1 &1307539529
 GameObject:
   m_ObjectHideFlags: 0

@@ -20,6 +20,14 @@ namespace OptIn.Voxel
 
     public static class VoxelGenerator
     {
+        public enum SimplifyingMethod
+        {
+            Stupid,
+            Culling,
+            GreedyOnlyHeight,
+            Greedy
+        };
+        
         public class NativeVoxelData
         {
             public NativeArray<Vector3> nativeVertices;
@@ -28,11 +36,20 @@ namespace OptIn.Voxel
             public NativeCounter counter;
             public JobHandle jobHandle;
 
-            public NativeVoxelData(int chunkSize)
+            public NativeVoxelData(int chunkSize, bool stupidMethod = false)
             {
-                nativeVertices = new NativeArray<Vector3>(12 * chunkSize * chunkSize * chunkSize, Allocator.TempJob);
-                nativeNormals = new NativeArray<Vector3>(12 * chunkSize * chunkSize * chunkSize, Allocator.TempJob);
-                nativeTriangles = new NativeArray<int>(18 * chunkSize * chunkSize * chunkSize, Allocator.TempJob);
+                if (stupidMethod)
+                {
+                    nativeVertices = new NativeArray<Vector3>(24 * chunkSize * chunkSize * chunkSize, Allocator.TempJob);
+                    nativeNormals = new NativeArray<Vector3>(24 * chunkSize * chunkSize * chunkSize, Allocator.TempJob);
+                    nativeTriangles = new NativeArray<int>(36 * chunkSize * chunkSize * chunkSize, Allocator.TempJob);   
+                }
+                else
+                {
+                    nativeVertices = new NativeArray<Vector3>(12 * chunkSize * chunkSize * chunkSize, Allocator.TempJob);
+                    nativeNormals = new NativeArray<Vector3>(12 * chunkSize * chunkSize * chunkSize, Allocator.TempJob);
+                    nativeTriangles = new NativeArray<int>(18 * chunkSize * chunkSize * chunkSize, Allocator.TempJob);   
+                }
                 counter = new NativeCounter(Allocator.TempJob);
             }
 
@@ -44,9 +61,40 @@ namespace OptIn.Voxel
                 counter.Dispose();
             }
         }
+        [BurstCompile]
+        struct VoxelStupidMeshingJob : IJobParallelFor
+        {
+            [ReadOnly] public NativeArray<Voxel> voxels;
+            [ReadOnly] public int chunkSize;
+
+            [NativeDisableParallelForRestriction] [WriteOnly]
+            public NativeArray<Vector3> vertices;
+
+            [NativeDisableParallelForRestriction] [WriteOnly]
+            public NativeArray<Vector3> normals;
+
+            [NativeDisableParallelForRestriction] [WriteOnly]
+            public NativeArray<int> triangles;
+
+            [WriteOnly] public NativeCounter.Concurrent counter;
+
+            public void Execute(int index)
+            {
+                int3 gridPosition = VoxelUtil.To3DIndex(index, chunkSize);
+                Voxel voxel = voxels[index];
+
+                if (voxel.data == Voxel.VoxelType.Air)
+                    return;
+
+                for (int direction = 0; direction < 6; direction++)
+                {
+                    AddTriangleByDirection(direction, gridPosition, counter, vertices, normals, triangles);
+                }
+            }
+        }
 
         [BurstCompile]
-        struct VoxelMeshingJob : IJobParallelFor
+        struct VoxelCullingJob : IJobParallelFor
         {
             [ReadOnly] public NativeArray<Voxel> voxels;
             [ReadOnly] public int chunkSize;
@@ -265,11 +313,11 @@ namespace OptIn.Voxel
             }
         }
 
-        public static NativeVoxelData ScheduleCullingJob(NativeArray<Voxel> voxels, int chunkSize)
+        static NativeVoxelData ScheduleStupidJob(NativeArray<Voxel> voxels, int chunkSize)
         {
-            NativeVoxelData data = new NativeVoxelData(chunkSize);
+            NativeVoxelData data = new NativeVoxelData(chunkSize, true);
 
-            VoxelMeshingJob voxelMeshingJob = new VoxelMeshingJob
+            VoxelStupidMeshingJob voxelCullingJob = new VoxelStupidMeshingJob
             {
                 voxels = voxels,
                 chunkSize = chunkSize,
@@ -279,13 +327,33 @@ namespace OptIn.Voxel
                 counter = data.counter.ToConcurrent(),
             };
             
-            data.jobHandle = voxelMeshingJob.Schedule(voxels.Length, 32);
+            data.jobHandle = voxelCullingJob.Schedule(voxels.Length, 32);
+            JobHandle.ScheduleBatchedJobs();
+            
+            return data;
+        }
+        
+        static NativeVoxelData ScheduleCullingJob(NativeArray<Voxel> voxels, int chunkSize)
+        {
+            NativeVoxelData data = new NativeVoxelData(chunkSize);
+
+            VoxelCullingJob voxelCullingJob = new VoxelCullingJob
+            {
+                voxels = voxels,
+                chunkSize = chunkSize,
+                vertices = data.nativeVertices,
+                normals = data.nativeNormals,
+                triangles = data.nativeTriangles,
+                counter = data.counter.ToConcurrent(),
+            };
+            
+            data.jobHandle = voxelCullingJob.Schedule(voxels.Length, 32);
             JobHandle.ScheduleBatchedJobs();
             
             return data;
         }
 
-        public static NativeVoxelData ScheduleGreedyOnlyHeightJob(NativeArray<Voxel> voxels, int chunkSize)
+        static NativeVoxelData ScheduleGreedyOnlyHeightJob(NativeArray<Voxel> voxels, int chunkSize)
         {
             NativeVoxelData data = new NativeVoxelData(chunkSize);
 
@@ -305,7 +373,7 @@ namespace OptIn.Voxel
             return data;
         }
         
-        public static NativeVoxelData ScheduleGreedyJob(NativeArray<Voxel> voxels, int chunkSize)
+        static NativeVoxelData ScheduleGreedyJob(NativeArray<Voxel> voxels, int chunkSize)
         {
             NativeVoxelData data = new NativeVoxelData(chunkSize);
 
@@ -322,6 +390,30 @@ namespace OptIn.Voxel
             data.jobHandle = voxelMeshingOnlyHeightJob.Schedule();
             JobHandle.ScheduleBatchedJobs();
             
+            return data;
+        }
+
+        public static NativeVoxelData ScheduleMeshingJob(NativeArray<Voxel> voxels, int chunkSize, SimplifyingMethod method)
+        {
+            NativeVoxelData data;
+            switch (method)
+            {
+                case SimplifyingMethod.Stupid:
+                    data = ScheduleStupidJob(voxels, chunkSize);
+                    break;
+                case SimplifyingMethod.Culling:
+                    data = ScheduleCullingJob(voxels, chunkSize);
+                    break;
+                case SimplifyingMethod.GreedyOnlyHeight:
+                    data = ScheduleGreedyOnlyHeightJob(voxels, chunkSize);
+                    break;
+                case SimplifyingMethod.Greedy:
+                    data = ScheduleGreedyJob(voxels, chunkSize);
+                    break;
+                default:
+                    data = ScheduleGreedyJob(voxels, chunkSize);
+                    break;
+            }
             return data;
         }
         
