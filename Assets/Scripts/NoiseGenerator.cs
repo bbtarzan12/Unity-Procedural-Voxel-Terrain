@@ -1,14 +1,14 @@
-
 using OptIn.Voxel;
 using OptIn.Voxel.Utils;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Jobs;
+using Unity.Mathematics;
 using UnityEngine;
 
 public static class NoiseGenerator
 {
-    static void RandomVoxel(out Voxel voxel, Vector3Int worldPosition)
+    static void RandomVoxel(out Voxel voxel, int3 worldPosition)
     {
         voxel = new Voxel();
         float density = -worldPosition.y;
@@ -23,15 +23,15 @@ public static class NoiseGenerator
     [BurstCompile]
     struct GenerateNoiseJob : IJobParallelFor
     {
-        [ReadOnly] public Vector3Int chunkPosition;
+        [ReadOnly] public int3 chunkPosition;
         [ReadOnly] public int chunkSize;
         
         [WriteOnly] public NativeArray<Voxel> voxels;
 
         public void Execute(int index)
         {
-            Vector3Int gridPosition = VoxelHelper.To3DIndex(index, chunkSize);
-            Vector3Int worldPosition = gridPosition + chunkPosition * chunkSize;
+            int3 gridPosition = VoxelUtil.To3DIndex(index, chunkSize);
+            int3 worldPosition = gridPosition + chunkPosition * chunkSize;
             RandomVoxel(out Voxel voxel, worldPosition);
             voxels[index] = voxel;
         }
@@ -39,7 +39,7 @@ public static class NoiseGenerator
     
     public static JobHandle Generate(NativeArray<Voxel>voxels, Vector3Int chunkPosition, int chunkSize)
     {
-        GenerateNoiseJob noiseJob = new GenerateNoiseJob {chunkPosition = chunkPosition, chunkSize = chunkSize, voxels = voxels};
+        GenerateNoiseJob noiseJob = new GenerateNoiseJob {chunkPosition = VoxelUtil.ToInt3(chunkPosition), chunkSize = chunkSize, voxels = voxels};
         JobHandle noiseJobHandle = noiseJob.Schedule(voxels.Length, 32);
         JobHandle.ScheduleBatchedJobs();
 

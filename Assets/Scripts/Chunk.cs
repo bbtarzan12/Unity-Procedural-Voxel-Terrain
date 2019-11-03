@@ -73,8 +73,8 @@ public class Chunk : MonoBehaviour
         if (isUpdating == false)
             return;
 
-        VoxelGenerator.CompleteCullingJob(data, vertices, normals, triangles);
-
+        VoxelGenerator.CompleteMeshingJob(data, vertices, normals, triangles);
+        
         mesh.Clear();
         mesh.SetVertices(vertices);
         mesh.SetTriangles(triangles, 0);
@@ -93,7 +93,9 @@ public class Chunk : MonoBehaviour
         if (dirty == false)
             return;
         
-        data = VoxelGenerator.ScheduleCullingJob(voxels, generator.ChunkSize);
+        //data = VoxelGenerator.ScheduleCullingJob(voxels, generator.ChunkSize);
+        //data = VoxelGenerator.ScheduleGreedyOnlyHeightJob(voxels, generator.ChunkSize); 
+        data = VoxelGenerator.ScheduleGreedyJob(voxels, generator.ChunkSize);
 
         isUpdating = true;
         dirty = false;

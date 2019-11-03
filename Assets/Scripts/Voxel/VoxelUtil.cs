@@ -1,15 +1,16 @@
+using Unity.Mathematics;
 using UnityEngine;
 
 namespace OptIn.Voxel
 {
-    public static class VoxelHelper
+    public static class VoxelUtil
     {
-        public static Vector3Int To3DIndex(int index, int chunkSize)
+        public static int3 To3DIndex(int index, int chunkSize)
         {
-            return new Vector3Int {z = index % chunkSize, y = (index / chunkSize) % chunkSize, x = index / (chunkSize * chunkSize)};
+            return new int3 {z = index % chunkSize, y = (index / chunkSize) % chunkSize, x = index / (chunkSize * chunkSize)};
         }
 
-        public static int To1DIndex(Vector3Int index, int chunkSize)
+        public static int To1DIndex(int3 index, int chunkSize)
         {
             return index.z + index.y * chunkSize + index.x * chunkSize * chunkSize;
         }
@@ -23,5 +24,9 @@ namespace OptIn.Voxel
         {
             return chunkPosition * chunkSize;
         }
+
+        public static Vector3 ToVector3(int3 v) => new Vector3(v.x, v.y, v.z);
+
+        public static int3 ToInt3(Vector3Int v) => new int3(v.x, v.y, v.z);
     }
 }

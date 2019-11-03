@@ -35,7 +35,7 @@ public class TerrainGenerator : MonoBehaviour
         if (target == null)
             return;
         
-        Vector3Int targetPosition = VoxelHelper.WorldToChunk(target.position, chunkSize);
+        Vector3Int targetPosition = VoxelUtil.WorldToChunk(target.position, chunkSize);
 
         if (lastTargetChunkPosition == targetPosition)
             return;
@@ -102,7 +102,7 @@ public class TerrainGenerator : MonoBehaviour
 
         GameObject chunkGameObject = new GameObject(chunkPosition.ToString());
         chunkGameObject.transform.SetParent(transform);
-        chunkGameObject.transform.position = VoxelHelper.ChunkToWorld(chunkPosition, chunkSize);
+        chunkGameObject.transform.position = VoxelUtil.ChunkToWorld(chunkPosition, chunkSize);
 
         Chunk newChunk = chunkGameObject.AddComponent<Chunk>();
         StartCoroutine(newChunk.Init(chunkPosition, this));

@@ -5,7 +5,8 @@ using OptIn.Voxel.Utils;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Jobs;
-using UnityEngine;
+ using Unity.Mathematics;
+ using UnityEngine;
 
 namespace OptIn.Voxel
 {
@@ -63,7 +64,7 @@ namespace OptIn.Voxel
 
             public void Execute(int index)
             {
-                Vector3Int gridPosition = VoxelHelper.To3DIndex(index, chunkSize);
+                int3 gridPosition = VoxelUtil.To3DIndex(index, chunkSize);
                 Voxel voxel = voxels[index];
 
                 if (voxel.data == Voxel.VoxelType.Air)
@@ -71,119 +72,196 @@ namespace OptIn.Voxel
 
                 for (int direction = 0; direction < 6; direction++)
                 {
-                    Vector3Int neighborPosition = gridPosition + VoxelGenerator.VoxelDirectionOffsets[direction];
+                    int3 neighborPosition = gridPosition + VoxelUtil.ToInt3(VoxelDirectionOffsets[direction]);
 
-                    if (!TransparencyCheck(neighborPosition))
+                    if (TransparencyCheck(voxels, neighborPosition, chunkSize))
                         continue;
 
-                    AddTriangleByDirection(direction, gridPosition);
-                }
-            }
-
-            bool TransparencyCheck(Vector3Int position)
-            {
-                if (!BoundaryCheck(position))
-                    return true;
-
-                int index = VoxelHelper.To1DIndex(position, chunkSize);
-                return voxels[index].data == Voxel.VoxelType.Air;
-            }
-
-            bool BoundaryCheck(Vector3Int position)
-            {
-                return chunkSize > position.x && chunkSize > position.y && chunkSize > position.z && position.x >= 0 && position.y >= 0 && position.z >= 0;
-            }
-
-            void AddTriangleByDirection(int direction, Vector3Int gridPosition)
-            {
-                int numFace = counter.Increment();
-
-                int numVertices = numFace * 4;
-                for (int i = 0; i < 4; i++)
-                {
-                    vertices[numVertices + i] = VoxelGenerator.CubeVertices[VoxelGenerator.CubeFaces[i + direction * 4]] + gridPosition;
-                    normals[numVertices + i] = VoxelGenerator.VoxelDirectionOffsets[direction];
-                }
-
-                int numTriangles = numFace * 6;
-                for (int i = 0; i < 6; i++)
-                {
-                    triangles[numTriangles + i] = VoxelGenerator.CubeIndices[direction * 6 + i] + numVertices;
+                    AddTriangleByDirection(direction, gridPosition, counter, vertices, normals, triangles);
                 }
             }
         }
 
-        public static void GenerateByGreedyMeshing(Voxel[,,] voxels, int chunkSize, bool enableJob, List<Vector3> vertices, List<Vector3> normals, List<int> triangles)
+        [BurstCompile]
+        struct VoxelGreedyMeshingOnlyHeightJob : IJob
         {
-            vertices.Clear();
-            triangles.Clear();
-            normals.Clear();
+            [ReadOnly] public NativeArray<Voxel> voxels;
+            [ReadOnly] public int chunkSize;
 
-            if (enableJob)
+            [NativeDisableParallelForRestriction] [WriteOnly]
+            public NativeArray<Vector3> vertices;
+
+            [NativeDisableParallelForRestriction] [WriteOnly]
+            public NativeArray<Vector3> normals;
+
+            [NativeDisableParallelForRestriction] [WriteOnly]
+            public NativeArray<int> triangles;
+            
+            [WriteOnly] public NativeCounter.Concurrent counter;
+
+            public void Execute()
             {
-                
-            }
-            else
-            {
-                int[,] heightMap = new int[chunkSize, chunkSize];
                 for (int direction = 0; direction < 6; direction++)
                 {
-                    for (int x = 0; x < chunkSize; x++)
+                    for (int depth = 0; depth < chunkSize; depth++)
                     {
-                        for (int y = 0; y < chunkSize; y++)
+                        for (int x = 0; x < chunkSize; x++)
                         {
-                            heightMap[x, y] = -1;
-                            for (int z = chunkSize - 1; z >= 0; z--)
+                            for (int y = 0; y < chunkSize;)
                             {
-                                Vector3Int gridPosition = new Vector3Int(x, y, z);
-                                Voxel voxel = voxels[x, y, z];
+                                int3 gridPosition = new int3 {[DirectionAlignedX[direction]] = x, [DirectionAlignedY[direction]] = y, [DirectionAlignedZ[direction]] = depth};
 
-                                if (voxel.data == Voxel.VoxelType.Block)
+                                Voxel voxel = voxels[VoxelUtil.To1DIndex(gridPosition, chunkSize)];
+
+                                if (voxel.data == Voxel.VoxelType.Air)
                                 {
-                                    heightMap[x, y] = z;
-                                    break;
+                                    y++;
+                                    continue;
                                 }
-                            }
-                        }
-                    }
 
-                    for (int x = 0; x < chunkSize; x++)
-                    {
-                        for (int y = 0; y < chunkSize;)
-                        {
-                            int map = heightMap[x, y];
+                                int3 neighborPosition = gridPosition + VoxelUtil.ToInt3(VoxelDirectionOffsets[direction]);
 
-                            if (map == -1)
-                            {
-                                y++;
-                                continue;
-                            }
-
-                            int height;
-                            for (height = 1; y + height < chunkSize && heightMap[x, y + height] == map; height++) {}
-
-                            bool done = false;
-
-                            int width;
-                            for (width = 1; width + x < chunkSize; width++)
-                            {
-                                for (int dy = y; dy < height; dy++)
+                                if (TransparencyCheck(voxels, neighborPosition, chunkSize))
                                 {
-                                    if (heightMap[x + width, dy] != map)
-                                    {
-                                        done = true;
+                                    y++;
+                                    continue;
+                                }
+
+                                int height;
+                                for (height = 1; height + y < chunkSize; height++)
+                                {
+                                    int3 nextPosition = gridPosition;
+                                    nextPosition[DirectionAlignedY[direction]] += height;
+
+                                    Voxel nextVoxel = voxels[VoxelUtil.To1DIndex(nextPosition, chunkSize)];
+
+                                    if (nextVoxel.data != voxel.data)
                                         break;
-                                    }
                                 }
 
-                                if (done)
-                                {
-                                    break;
-                                }
+                                AddQuadByDirection(direction, 1.0f, height, gridPosition, counter, vertices, normals, triangles);
+                                y += height;
                             }
                         }
                     }
                 }
+            }
+        }
+        
+        [BurstCompile]
+        struct VoxelGreedyMeshingJob : IJob
+        {
+            [ReadOnly] public NativeArray<Voxel> voxels;
+            [ReadOnly] public int chunkSize;
+
+            [NativeDisableParallelForRestriction] [WriteOnly]
+            public NativeArray<Vector3> vertices;
+
+            [NativeDisableParallelForRestriction] [WriteOnly]
+            public NativeArray<Vector3> normals;
+
+            [NativeDisableParallelForRestriction] [WriteOnly]
+            public NativeArray<int> triangles;
+            
+            [WriteOnly] public NativeCounter.Concurrent counter;
+            
+            struct Empty {}
+
+            public void Execute()
+            {
+                NativeHashMap<int3, Empty> hashMap = new NativeHashMap<int3, Empty>(chunkSize * chunkSize, Allocator.Temp);
+                
+                for (int direction = 0; direction < 6; direction++)
+                {
+                    for (int depth = 0; depth < chunkSize; depth++)
+                    {
+                        for (int x = 0; x < chunkSize; x++)
+                        {
+                            for (int y = 0; y < chunkSize;)
+                            {
+                                int3 gridPosition = new int3 {[DirectionAlignedX[direction]] = x, [DirectionAlignedY[direction]] = y, [DirectionAlignedZ[direction]] = depth};
+
+                                Voxel voxel = voxels[VoxelUtil.To1DIndex(gridPosition, chunkSize)];
+
+                                if (voxel.data == Voxel.VoxelType.Air)
+                                {
+                                    y++;
+                                    continue;
+                                }
+                                
+                                if (hashMap.ContainsKey(gridPosition))
+                                {
+                                    y++;
+                                    continue;
+                                }
+
+                                int3 neighborPosition = gridPosition + VoxelUtil.ToInt3(VoxelDirectionOffsets[direction]);
+
+                                if (TransparencyCheck(voxels, neighborPosition, chunkSize))
+                                {
+                                    y++;
+                                    continue;
+                                }
+
+                                hashMap.TryAdd(gridPosition, new Empty());
+
+                                int height;
+                                for (height = 1; height + y < chunkSize; height++)
+                                {
+                                    int3 nextPosition = gridPosition;
+                                    nextPosition[DirectionAlignedY[direction]] += height;
+
+                                    Voxel nextVoxel = voxels[VoxelUtil.To1DIndex(nextPosition, chunkSize)];
+
+                                    if (nextVoxel.data != voxel.data || hashMap.ContainsKey(nextPosition))
+                                        break;
+
+                                    hashMap.TryAdd(nextPosition, new Empty());
+                                }
+
+                                bool isDone = false;
+                                int width;
+                                for (width = 1; width + x < chunkSize; width++)
+                                {
+                                    for (int dy = 0; dy < height; dy++)
+                                    {
+                                        int3 nextPosition = gridPosition;
+                                        nextPosition[DirectionAlignedX[direction]] += width;
+                                        nextPosition[DirectionAlignedY[direction]] += dy;
+
+                                        Voxel nextVoxel = voxels[VoxelUtil.To1DIndex(nextPosition, chunkSize)];
+
+                                        if (nextVoxel.data != voxel.data || hashMap.ContainsKey(nextPosition))
+                                        {
+                                            isDone = true;
+                                            break;
+                                        }
+                                    }
+
+                                    if (isDone)
+                                    {
+                                        break;
+                                    }
+
+                                    for (int dy = 0; dy < height; dy++)
+                                    {
+                                        int3 nextPosition = gridPosition;
+                                        nextPosition[DirectionAlignedX[direction]] += width;
+                                        nextPosition[DirectionAlignedY[direction]] += dy;
+                                        hashMap.TryAdd(nextPosition, new Empty());
+                                    }
+                                }
+
+                                AddQuadByDirection(direction, width, height, gridPosition, counter, vertices, normals, triangles);
+                                y += height;
+                            }
+                        }
+                        
+                        hashMap.Clear();
+                    }
+                }
+
+                hashMap.Dispose();
             }
         }
 
@@ -207,7 +285,47 @@ namespace OptIn.Voxel
             return data;
         }
 
-        public static void CompleteCullingJob(NativeVoxelData data, List<Vector3> vertices, List<Vector3> normals, List<int> triangles)
+        public static NativeVoxelData ScheduleGreedyOnlyHeightJob(NativeArray<Voxel> voxels, int chunkSize)
+        {
+            NativeVoxelData data = new NativeVoxelData(chunkSize);
+
+            VoxelGreedyMeshingOnlyHeightJob voxelMeshingOnlyHeightJob = new VoxelGreedyMeshingOnlyHeightJob
+            {
+                voxels = voxels,
+                chunkSize = chunkSize,
+                vertices = data.nativeVertices,
+                normals = data.nativeNormals,
+                triangles = data.nativeTriangles,
+                counter = data.counter.ToConcurrent(),
+            };
+            
+            data.jobHandle = voxelMeshingOnlyHeightJob.Schedule();
+            JobHandle.ScheduleBatchedJobs();
+            
+            return data;
+        }
+        
+        public static NativeVoxelData ScheduleGreedyJob(NativeArray<Voxel> voxels, int chunkSize)
+        {
+            NativeVoxelData data = new NativeVoxelData(chunkSize);
+
+            VoxelGreedyMeshingJob voxelMeshingOnlyHeightJob = new VoxelGreedyMeshingJob
+            {
+                voxels = voxels,
+                chunkSize = chunkSize,
+                vertices = data.nativeVertices,
+                normals = data.nativeNormals,
+                triangles = data.nativeTriangles,
+                counter = data.counter.ToConcurrent(),
+            };
+            
+            data.jobHandle = voxelMeshingOnlyHeightJob.Schedule();
+            JobHandle.ScheduleBatchedJobs();
+            
+            return data;
+        }
+        
+        public static void CompleteMeshingJob(NativeVoxelData data, List<Vector3> vertices, List<Vector3> normals, List<int> triangles)
         {
             data.jobHandle.Complete();
 
@@ -228,107 +346,110 @@ namespace OptIn.Voxel
             data.Dispose();
         }
 
-        public static void GenerateByCulling(Voxel[,,] voxels, int chunkSize, List<Vector3> vertices, List<Vector3> normals, List<int> triangles)
-        {
-            vertices.Clear();
-            triangles.Clear();
-            normals.Clear();
-
-            for (int x = 0; x < chunkSize; x += 1)
-            {
-                for (int y = 0; y < chunkSize; y += 1)
-                {
-                    for (int z = 0; z < chunkSize; z += 1)
-                    {
-                        Vector3Int gridPosition = new Vector3Int(x, y, z);
-                        Voxel voxel = voxels[x, y, z];
-
-                        if (voxel.data == Voxel.VoxelType.Air)
-                            continue;
-
-                        for (int direction = 0; direction < 6; direction++)
-                        {
-                            Vector3Int neighborPosition = gridPosition + VoxelDirectionOffsets[direction];
-
-                            if (!TransparencyCheck(voxels, neighborPosition, chunkSize))
-                                continue;
-
-                            AddTriangleByDirection(direction, gridPosition, vertices, normals, triangles);
-                        }
-                    }
-                }
-            }
-        }
-
-        static bool BoundaryCheck(int chunkSize, Vector3Int position)
+        static bool BoundaryCheck(int chunkSize, int3 position)
         {
             return chunkSize > position.x && chunkSize > position.y && chunkSize > position.z && position.x >= 0 && position.y >= 0 && position.z >= 0;
         }
 
-        static bool TransparencyCheck(Voxel[,,] voxels, Vector3Int position, int chunkSize)
+        static bool TransparencyCheck(NativeArray<Voxel> voxels, int3 position, int chunkSize)
         {
             if (!BoundaryCheck(chunkSize, position))
-                return true;
+                return false;
 
-            return voxels[position.x, position.y, position.z].data == Voxel.VoxelType.Air;
+            return voxels[VoxelUtil.To1DIndex(position, chunkSize)].data != Voxel.VoxelType.Air;
         }
 
-        static void AddTriangleByDirection(int direction, Vector3Int gridPosition, List<Vector3> vertices, List<Vector3> normals, List<int> triangles)
+        static void AddQuadByDirection(int direction, float width, float height, int3 gridPosition, NativeCounter.Concurrent counter, NativeArray<Vector3> vertices, NativeArray<Vector3> normals, NativeArray<int> triangles)
         {
-            AddTriangleByDirection(direction, gridPosition, 1, vertices, normals, triangles);
-        }
-
-        static void AddTriangleByDirection(int direction, Vector3Int gridPosition, float scale, List<Vector3> vertices, List<Vector3> normals, List<int> triangles)
-        {
-            int numTriangles = vertices.Count;
-            for (int i = direction * 6; i < (direction + 1) * 6; i++)
-            {
-                triangles.Add((CubeIndices[i] + numTriangles));
-            }
-
+            int numFace = counter.Increment();
+            
+            int numVertices = numFace * 4;
             for (int i = 0; i < 4; i++)
             {
-                vertices.Add(CubeVertices[CubeFaces[i + direction * 4]] * scale + gridPosition);
-                normals.Add(VoxelDirectionOffsets[direction]);
+                Vector3 vertex = CubeVertices[CubeFaces[i + direction * 4]];
+
+                vertex[DirectionAlignedX[direction]] *= width;
+                vertex[DirectionAlignedY[direction]] *= height;
+                
+                vertices[numVertices + i] = vertex + VoxelUtil.ToVector3(gridPosition);
+                normals[numVertices + i] = VoxelDirectionOffsets[direction];
+            }
+
+            int numTriangles = numFace * 6;
+            for (int i = 0; i < 6; i++)
+            {
+                triangles[numTriangles + i] = CubeIndices[direction * 6 + i] + numVertices;
             }
         }
 
+        static void AddTriangleByDirection(int direction, int3 gridPosition, NativeCounter.Concurrent counter, NativeArray<Vector3> vertices, NativeArray<Vector3> normals, NativeArray<int> triangles)
+        {
+            int numFace = counter.Increment();
+
+            int numVertices = numFace * 4;
+            for (int i = 0; i < 4; i++)
+            {
+                vertices[numVertices + i] = CubeVertices[CubeFaces[i + direction * 4]] + VoxelUtil.ToVector3(gridPosition);
+                normals[numVertices + i] = VoxelDirectionOffsets[direction];
+            }
+
+            int numTriangles = numFace * 6;
+            for (int i = 0; i < 6; i++)
+            {
+                triangles[numTriangles + i] = CubeIndices[direction * 6 + i] + numVertices;
+            }
+        }
+
+        public static readonly int[] DirectionAlignedX = { 2, 2, 0, 0, 0, 0 };
+        public static readonly int[] DirectionAlignedY = { 1, 1, 2, 2, 1, 1 };
+        public static readonly int[] DirectionAlignedZ = { 0, 0, 1, 1, 2, 2 };
+        
         public static readonly Vector3Int[] VoxelDirectionOffsets =
         {
-            new Vector3Int(0, 0, 1), // front
-            new Vector3Int(0, 0, -1), // back
+            new Vector3Int(1, 0, 0), // right
+            new Vector3Int(-1, 0, 0), // left
             new Vector3Int(0, 1, 0), // top
             new Vector3Int(0, -1, 0), // bottom
-            new Vector3Int(-1, 0, 0), // left
-            new Vector3Int(1, 0, 0), // right
+            new Vector3Int(0, 0, 1), // front
+            new Vector3Int(0, 0, -1), // back
         };
 
-        public static readonly Vector3[] CubeVertices = {new Vector3(0, 0, 0), new Vector3(1, 0, 0), new Vector3(1, 0, 1), new Vector3(0, 0, 1), new Vector3(0, 1, 0), new Vector3(1, 1, 0), new Vector3(1, 1, 1), new Vector3(0, 1, 1)};
+        public static readonly Vector3[] CubeVertices =
+        {
+            new Vector3(0, 0, 0),
+            new Vector3(1, 0, 0),
+            new Vector3(1, 0, 1),
+            new Vector3(0, 0, 1), 
+            new Vector3(0, 1, 0), 
+            new Vector3(1, 1, 0),
+            new Vector3(1, 1, 1),
+            new Vector3(0, 1, 1)
+        };
 
         public static readonly int[] CubeFaces =
         {
+            1, 2, 5, 6, // right
+            3, 0, 7, 4, // left
+            4, 5, 7, 6, // top
+            1, 0, 2, 3, // bottom
             2, 3, 6, 7, // front
             0, 1, 4, 5, // back
-            4, 5, 6, 7, // top
-            0, 1, 2, 3, // bottom
-            0, 3, 4, 7, // left
-            1, 2, 5, 6, // right
         };
 
         public static readonly int[] CubeIndices =
         {
+            0, 3, 1, 
+            0, 2, 3, //face right
+            0, 2, 1, 
+            1, 2, 3, //face left
+            0, 3, 1, 
+            0, 2, 3, //face top
+            0, 2, 1, 
+            1, 2, 3, //face bottom
             0, 3, 1,                        
             0, 2, 3, //face front
             0, 2, 1, 
             1, 2, 3, //face back
-            0, 2, 1, 
-            0, 3, 2, //face top
-            0, 1, 2, 
-            0, 2, 3, //face bottom
-            0, 1, 2, 
-            1, 3, 2, //face left
-            0, 2, 3, 
-            0, 3, 1, //face right
         };
     }
 
