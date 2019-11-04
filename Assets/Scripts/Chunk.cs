@@ -4,7 +4,8 @@ using System.Collections.Generic;
 using OptIn.Voxel;
 using Unity.Collections;
 using Unity.Jobs;
-using UnityEngine;
+ using Unity.Mathematics;
+ using UnityEngine;
 using UnityEngine.Rendering;
 
 [RequireComponent(typeof(MeshRenderer))]
@@ -18,17 +19,13 @@ public class Chunk : MonoBehaviour
     bool isUpdating;
     NativeArray<Voxel> voxels;
 
-    List<Vector3> vertices = new List<Vector3>();
-    List<Vector3> normals = new List<Vector3>();
-    List<int> triangles = new List<int>();
-    
     // Mesh
     Mesh mesh;
     MeshFilter meshFilter;
     MeshRenderer meshRenderer;
     MeshCollider meshCollider;
 
-    VoxelGenerator.NativeVoxelData data;
+    VoxelGenerator.NativeMeshData meshData;
     JobHandle noiseJobHandle;
 
     public bool Dirty => dirty;
@@ -44,8 +41,8 @@ public class Chunk : MonoBehaviour
     void OnDestroy()
     {
         noiseJobHandle.Complete();
-        data?.jobHandle.Complete();
-        data?.Dispose();
+        meshData?.jobHandle.Complete();
+        meshData?.Dispose();
         voxels.Dispose();
     }
 
@@ -60,9 +57,9 @@ public class Chunk : MonoBehaviour
         generator = parent;
 
         meshRenderer.material = generator.ChunkMaterial;
-        
-        voxels = new NativeArray<Voxel>(generator.ChunkSize * generator.ChunkSize * generator.ChunkSize, Allocator.Persistent);
-        noiseJobHandle = NoiseGenerator.Generate(voxels, chunkPosition, generator.ChunkSize);
+
+        voxels = new NativeArray<Voxel>(generator.ChunkSize * generator.ChunkSize * generator.ChunkSize, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
+        noiseJobHandle = NoiseGenerator.Generate(voxels, VoxelUtil.ToInt3(chunkPosition), generator.ChunkSize);
         yield return new WaitUntil(() => noiseJobHandle.IsCompleted);
         noiseJobHandle.Complete();
         dirty = true;
@@ -73,18 +70,24 @@ public class Chunk : MonoBehaviour
         if (isUpdating == false)
             return;
 
-        VoxelGenerator.CompleteMeshingJob(data, vertices, normals, triangles);
+        if (meshData == null)
+            return;
         
-        mesh.Clear();
-        mesh.SetVertices(vertices);
-        mesh.SetTriangles(triangles, 0);
-        mesh.SetNormals(normals);
+        meshData.CompleteMeshingJob(out int verticeSize, out int indicesSize);
         
-        mesh.RecalculateNormals();
-        
-        //meshCollider.sharedMesh = mesh;
+        if (verticeSize > 0 && indicesSize > 0)
+        {
+            mesh.Clear();
+            mesh.SetVertices(meshData.nativeVertices, 0, verticeSize);
+            mesh.SetIndices(meshData.nativeIndices, 0, indicesSize, MeshTopology.Triangles, 0);
+            mesh.SetNormals(meshData.nativeNormals, 0, verticeSize);
 
-        data = null;
+            mesh.RecalculateNormals();
+            
+            meshCollider.sharedMesh = mesh;
+        }
+        
+        meshData.Dispose();
         isUpdating = false;
     }
 
@@ -93,7 +96,9 @@ public class Chunk : MonoBehaviour
         if (dirty == false)
             return;
 
-        data = VoxelGenerator.ScheduleMeshingJob(voxels, generator.ChunkSize, generator.SimplifyingMethod);
+        meshData?.Dispose();
+        meshData = new VoxelGenerator.NativeMeshData(generator.ChunkSize);
+        meshData.ScheduleMeshingJob(voxels, generator.ChunkSize, generator.SimplifyingMethod);
         
         isUpdating = true;
         dirty = false;

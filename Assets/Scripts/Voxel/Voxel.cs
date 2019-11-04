@@ -22,74 +22,121 @@ namespace OptIn.Voxel
     {
         public enum SimplifyingMethod
         {
-            Stupid,
             Culling,
             GreedyOnlyHeight,
             Greedy
         };
-        
-        public class NativeVoxelData
+
+        public class NativeMeshData
         {
-            public NativeArray<Vector3> nativeVertices;
-            public NativeArray<Vector3> nativeNormals;
-            public NativeArray<int> nativeTriangles;
+            public NativeArray<float3> nativeVertices;
+            public NativeArray<float3> nativeNormals;
+            public NativeArray<int> nativeIndices;
             public NativeCounter counter;
             public JobHandle jobHandle;
 
-            public NativeVoxelData(int chunkSize, bool stupidMethod = false)
+            public NativeMeshData(int chunkSize)
             {
-                if (stupidMethod)
-                {
-                    nativeVertices = new NativeArray<Vector3>(24 * chunkSize * chunkSize * chunkSize, Allocator.TempJob);
-                    nativeNormals = new NativeArray<Vector3>(24 * chunkSize * chunkSize * chunkSize, Allocator.TempJob);
-                    nativeTriangles = new NativeArray<int>(36 * chunkSize * chunkSize * chunkSize, Allocator.TempJob);   
-                }
-                else
-                {
-                    nativeVertices = new NativeArray<Vector3>(12 * chunkSize * chunkSize * chunkSize, Allocator.TempJob);
-                    nativeNormals = new NativeArray<Vector3>(12 * chunkSize * chunkSize * chunkSize, Allocator.TempJob);
-                    nativeTriangles = new NativeArray<int>(18 * chunkSize * chunkSize * chunkSize, Allocator.TempJob);   
-                }
+                nativeVertices = new NativeArray<float3>(12 * chunkSize * chunkSize * chunkSize, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+                nativeNormals = new NativeArray<float3>(12 * chunkSize * chunkSize * chunkSize, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+                nativeIndices = new NativeArray<int>(18 * chunkSize * chunkSize * chunkSize, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
                 counter = new NativeCounter(Allocator.TempJob);
+            }
+
+            ~NativeMeshData()
+            {
+                jobHandle.Complete();
+                Dispose();
             }
 
             public void Dispose()
             {
-                nativeVertices.Dispose();
-                nativeNormals.Dispose();
-                nativeTriangles.Dispose();
-                counter.Dispose();
+                if(nativeVertices.IsCreated)
+                    nativeVertices.Dispose();
+                
+                if(nativeNormals.IsCreated)
+                    nativeNormals.Dispose();
+                
+                if(nativeIndices.IsCreated)
+                    nativeIndices.Dispose();
+                
+                if(counter.IsCreated)
+                    counter.Dispose();
             }
-        }
-        [BurstCompile]
-        struct VoxelStupidMeshingJob : IJobParallelFor
-        {
-            [ReadOnly] public NativeArray<Voxel> voxels;
-            [ReadOnly] public int chunkSize;
 
-            [NativeDisableParallelForRestriction] [WriteOnly]
-            public NativeArray<Vector3> vertices;
-
-            [NativeDisableParallelForRestriction] [WriteOnly]
-            public NativeArray<Vector3> normals;
-
-            [NativeDisableParallelForRestriction] [WriteOnly]
-            public NativeArray<int> triangles;
-
-            [WriteOnly] public NativeCounter.Concurrent counter;
-
-            public void Execute(int index)
+            public void ScheduleMeshingJob(NativeArray<Voxel> voxels, int chunkSize, SimplifyingMethod method)
             {
-                int3 gridPosition = VoxelUtil.To3DIndex(index, chunkSize);
-                Voxel voxel = voxels[index];
-
-                if (voxel.data == Voxel.VoxelType.Air)
-                    return;
-
-                for (int direction = 0; direction < 6; direction++)
+                switch (method)
                 {
-                    AddQuadByDirection(direction, 1.0f, 1.0f, gridPosition, counter, vertices, normals, triangles);
+                    case SimplifyingMethod.Culling:
+                        ScheduleCullingJob(voxels, chunkSize);
+                        break;
+                    case SimplifyingMethod.GreedyOnlyHeight:
+                        ScheduleGreedyOnlyHeightJob(voxels, chunkSize);
+                        break;
+                    case SimplifyingMethod.Greedy:
+                        ScheduleGreedyJob(voxels, chunkSize);
+                        break;
+                    default:
+                        ScheduleGreedyJob(voxels, chunkSize);
+                        break;
                 }
+            }
+
+            public void CompleteMeshingJob(out int verticeSize, out int indicesSize)
+            {
+                jobHandle.Complete();
+
+                verticeSize = counter.Count * 4;
+                indicesSize = counter.Count * 6;
+            }
+
+            void ScheduleCullingJob(NativeArray<Voxel> voxels, int chunkSize)
+            {
+                VoxelCullingJob voxelCullingJob = new VoxelCullingJob
+                {
+                    voxels = voxels,
+                    chunkSize = chunkSize,
+                    vertices = nativeVertices,
+                    normals = nativeNormals,
+                    indices = nativeIndices,
+                    counter = counter.ToConcurrent(),
+                };
+
+                jobHandle = voxelCullingJob.Schedule(voxels.Length, 32);
+                JobHandle.ScheduleBatchedJobs();
+            }
+
+            void ScheduleGreedyOnlyHeightJob(NativeArray<Voxel> voxels, int chunkSize)
+            {
+                VoxelGreedyMeshingOnlyHeightJob voxelMeshingOnlyHeightJob = new VoxelGreedyMeshingOnlyHeightJob
+                {
+                    voxels = voxels,
+                    chunkSize = chunkSize,
+                    vertices = nativeVertices,
+                    normals = nativeNormals,
+                    indices = nativeIndices,
+                    counter = counter.ToConcurrent(),
+                };
+
+                jobHandle = voxelMeshingOnlyHeightJob.Schedule();
+                JobHandle.ScheduleBatchedJobs();
+            }
+
+            void ScheduleGreedyJob(NativeArray<Voxel> voxels, int chunkSize)
+            {
+                VoxelGreedyMeshingJob voxelMeshingOnlyHeightJob = new VoxelGreedyMeshingJob
+                {
+                    voxels = voxels,
+                    chunkSize = chunkSize,
+                    vertices = nativeVertices,
+                    normals = nativeNormals,
+                    indices = nativeIndices,
+                    counter = counter.ToConcurrent(),
+                };
+
+                jobHandle = voxelMeshingOnlyHeightJob.Schedule();
+                JobHandle.ScheduleBatchedJobs();
             }
         }
 
@@ -100,13 +147,13 @@ namespace OptIn.Voxel
             [ReadOnly] public int chunkSize;
 
             [NativeDisableParallelForRestriction] [WriteOnly]
-            public NativeArray<Vector3> vertices;
+            public NativeArray<float3> vertices;
 
             [NativeDisableParallelForRestriction] [WriteOnly]
-            public NativeArray<Vector3> normals;
+            public NativeArray<float3> normals;
 
             [NativeDisableParallelForRestriction] [WriteOnly]
-            public NativeArray<int> triangles;
+            public NativeArray<int> indices;
 
             [WriteOnly] public NativeCounter.Concurrent counter;
 
@@ -120,12 +167,12 @@ namespace OptIn.Voxel
 
                 for (int direction = 0; direction < 6; direction++)
                 {
-                    int3 neighborPosition = gridPosition + VoxelUtil.ToInt3(VoxelDirectionOffsets[direction]);
+                    int3 neighborPosition = gridPosition + VoxelDirectionOffsets[direction];
 
                     if (TransparencyCheck(voxels, neighborPosition, chunkSize))
                         continue;
 
-                    AddQuadByDirection(direction, 1.0f, 1.0f, gridPosition, counter, vertices, normals, triangles);
+                    AddQuadByDirection(direction, 1.0f, 1.0f, gridPosition, counter, vertices, normals, indices);
                 }
             }
         }
@@ -137,13 +184,13 @@ namespace OptIn.Voxel
             [ReadOnly] public int chunkSize;
 
             [NativeDisableParallelForRestriction] [WriteOnly]
-            public NativeArray<Vector3> vertices;
+            public NativeArray<float3> vertices;
 
             [NativeDisableParallelForRestriction] [WriteOnly]
-            public NativeArray<Vector3> normals;
+            public NativeArray<float3> normals;
 
             [NativeDisableParallelForRestriction] [WriteOnly]
-            public NativeArray<int> triangles;
+            public NativeArray<int> indices;
             
             [WriteOnly] public NativeCounter.Concurrent counter;
 
@@ -167,7 +214,7 @@ namespace OptIn.Voxel
                                     continue;
                                 }
 
-                                int3 neighborPosition = gridPosition + VoxelUtil.ToInt3(VoxelDirectionOffsets[direction]);
+                                int3 neighborPosition = gridPosition + VoxelDirectionOffsets[direction];
 
                                 if (TransparencyCheck(voxels, neighborPosition, chunkSize))
                                 {
@@ -187,7 +234,7 @@ namespace OptIn.Voxel
                                         break;
                                 }
 
-                                AddQuadByDirection(direction, 1.0f, height, gridPosition, counter, vertices, normals, triangles);
+                                AddQuadByDirection(direction, 1.0f, height, gridPosition, counter, vertices, normals, indices);
                                 y += height;
                             }
                         }
@@ -203,13 +250,13 @@ namespace OptIn.Voxel
             [ReadOnly] public int chunkSize;
 
             [NativeDisableParallelForRestriction] [WriteOnly]
-            public NativeArray<Vector3> vertices;
+            public NativeArray<float3> vertices;
 
             [NativeDisableParallelForRestriction] [WriteOnly]
-            public NativeArray<Vector3> normals;
+            public NativeArray<float3> normals;
 
             [NativeDisableParallelForRestriction] [WriteOnly]
-            public NativeArray<int> triangles;
+            public NativeArray<int> indices;
             
             [WriteOnly] public NativeCounter.Concurrent counter;
             
@@ -243,7 +290,7 @@ namespace OptIn.Voxel
                                     continue;
                                 }
 
-                                int3 neighborPosition = gridPosition + VoxelUtil.ToInt3(VoxelDirectionOffsets[direction]);
+                                int3 neighborPosition = gridPosition + VoxelDirectionOffsets[direction];
 
                                 if (TransparencyCheck(voxels, neighborPosition, chunkSize))
                                 {
@@ -300,7 +347,7 @@ namespace OptIn.Voxel
                                     }
                                 }
 
-                                AddQuadByDirection(direction, width, height, gridPosition, counter, vertices, normals, triangles);
+                                AddQuadByDirection(direction, width, height, gridPosition, counter, vertices, normals, indices);
                                 y += height;
                             }
                         }
@@ -311,131 +358,6 @@ namespace OptIn.Voxel
 
                 hashMap.Dispose();
             }
-        }
-
-        static NativeVoxelData ScheduleStupidJob(NativeArray<Voxel> voxels, int chunkSize)
-        {
-            NativeVoxelData data = new NativeVoxelData(chunkSize, true);
-
-            VoxelStupidMeshingJob voxelCullingJob = new VoxelStupidMeshingJob
-            {
-                voxels = voxels,
-                chunkSize = chunkSize,
-                vertices = data.nativeVertices,
-                normals = data.nativeNormals,
-                triangles = data.nativeTriangles,
-                counter = data.counter.ToConcurrent(),
-            };
-            
-            data.jobHandle = voxelCullingJob.Schedule(voxels.Length, 32);
-            JobHandle.ScheduleBatchedJobs();
-            
-            return data;
-        }
-        
-        static NativeVoxelData ScheduleCullingJob(NativeArray<Voxel> voxels, int chunkSize)
-        {
-            NativeVoxelData data = new NativeVoxelData(chunkSize);
-
-            VoxelCullingJob voxelCullingJob = new VoxelCullingJob
-            {
-                voxels = voxels,
-                chunkSize = chunkSize,
-                vertices = data.nativeVertices,
-                normals = data.nativeNormals,
-                triangles = data.nativeTriangles,
-                counter = data.counter.ToConcurrent(),
-            };
-            
-            data.jobHandle = voxelCullingJob.Schedule(voxels.Length, 32);
-            JobHandle.ScheduleBatchedJobs();
-            
-            return data;
-        }
-
-        static NativeVoxelData ScheduleGreedyOnlyHeightJob(NativeArray<Voxel> voxels, int chunkSize)
-        {
-            NativeVoxelData data = new NativeVoxelData(chunkSize);
-
-            VoxelGreedyMeshingOnlyHeightJob voxelMeshingOnlyHeightJob = new VoxelGreedyMeshingOnlyHeightJob
-            {
-                voxels = voxels,
-                chunkSize = chunkSize,
-                vertices = data.nativeVertices,
-                normals = data.nativeNormals,
-                triangles = data.nativeTriangles,
-                counter = data.counter.ToConcurrent(),
-            };
-            
-            data.jobHandle = voxelMeshingOnlyHeightJob.Schedule();
-            JobHandle.ScheduleBatchedJobs();
-            
-            return data;
-        }
-        
-        static NativeVoxelData ScheduleGreedyJob(NativeArray<Voxel> voxels, int chunkSize)
-        {
-            NativeVoxelData data = new NativeVoxelData(chunkSize);
-
-            VoxelGreedyMeshingJob voxelMeshingOnlyHeightJob = new VoxelGreedyMeshingJob
-            {
-                voxels = voxels,
-                chunkSize = chunkSize,
-                vertices = data.nativeVertices,
-                normals = data.nativeNormals,
-                triangles = data.nativeTriangles,
-                counter = data.counter.ToConcurrent(),
-            };
-            
-            data.jobHandle = voxelMeshingOnlyHeightJob.Schedule();
-            JobHandle.ScheduleBatchedJobs();
-            
-            return data;
-        }
-
-        public static NativeVoxelData ScheduleMeshingJob(NativeArray<Voxel> voxels, int chunkSize, SimplifyingMethod method)
-        {
-            NativeVoxelData data;
-            switch (method)
-            {
-                case SimplifyingMethod.Stupid:
-                    data = ScheduleStupidJob(voxels, chunkSize);
-                    break;
-                case SimplifyingMethod.Culling:
-                    data = ScheduleCullingJob(voxels, chunkSize);
-                    break;
-                case SimplifyingMethod.GreedyOnlyHeight:
-                    data = ScheduleGreedyOnlyHeightJob(voxels, chunkSize);
-                    break;
-                case SimplifyingMethod.Greedy:
-                    data = ScheduleGreedyJob(voxels, chunkSize);
-                    break;
-                default:
-                    data = ScheduleGreedyJob(voxels, chunkSize);
-                    break;
-            }
-            return data;
-        }
-        
-        public static void CompleteMeshingJob(NativeVoxelData data, List<Vector3> vertices, List<Vector3> normals, List<int> triangles)
-        {
-            data.jobHandle.Complete();
-
-            if (data.counter.Count > 0)
-            {
-                int verticeSize = data.counter.Count * 4;
-                int triangleSize = data.counter.Count * 6;
-
-                NativeSlice<Vector3> nativeSliceVertices = new NativeSlice<Vector3>(data.nativeVertices, 0, verticeSize);
-                NativeSlice<Vector3> nativeSliceNormal = new NativeSlice<Vector3>(data.nativeNormals, 0, verticeSize);
-                NativeSlice<int> nativeSliceTriangles = new NativeSlice<int>(data.nativeTriangles, 0, triangleSize);
-
-                vertices.NativeAddRange(nativeSliceVertices);
-                triangles.NativeAddRange(nativeSliceTriangles);
-                normals.NativeAddRange(nativeSliceNormal);
-            }
-            
-            data.Dispose();
         }
 
         static bool BoundaryCheck(int chunkSize, int3 position)
@@ -451,26 +373,26 @@ namespace OptIn.Voxel
             return voxels[VoxelUtil.To1DIndex(position, chunkSize)].data != Voxel.VoxelType.Air;
         }
 
-        static void AddQuadByDirection(int direction, float width, float height, int3 gridPosition, NativeCounter.Concurrent counter, NativeArray<Vector3> vertices, NativeArray<Vector3> normals, NativeArray<int> triangles)
+        static void AddQuadByDirection(int direction, float width, float height, int3 gridPosition, NativeCounter.Concurrent counter, NativeArray<float3> vertices, NativeArray<float3> normals, NativeArray<int> indices)
         {
             int numFace = counter.Increment();
             
             int numVertices = numFace * 4;
             for (int i = 0; i < 4; i++)
             {
-                Vector3 vertex = CubeVertices[CubeFaces[i + direction * 4]];
+                float3 vertex = CubeVertices[CubeFaces[i + direction * 4]];
 
                 vertex[DirectionAlignedX[direction]] *= width;
                 vertex[DirectionAlignedY[direction]] *= height;
                 
-                vertices[numVertices + i] = vertex + VoxelUtil.ToVector3(gridPosition);
+                vertices[numVertices + i] = vertex + gridPosition;
                 normals[numVertices + i] = VoxelDirectionOffsets[direction];
             }
 
-            int numTriangles = numFace * 6;
+            int numindices = numFace * 6;
             for (int i = 0; i < 6; i++)
             {
-                triangles[numTriangles + i] = CubeIndices[direction * 6 + i] + numVertices;
+                indices[numindices + i] = CubeIndices[direction * 6 + i] + numVertices;
             }
         }
 
@@ -478,26 +400,26 @@ namespace OptIn.Voxel
         public static readonly int[] DirectionAlignedY = { 1, 1, 2, 2, 1, 1 };
         public static readonly int[] DirectionAlignedZ = { 0, 0, 1, 1, 2, 2 };
         
-        public static readonly Vector3Int[] VoxelDirectionOffsets =
+        public static readonly int3[] VoxelDirectionOffsets =
         {
-            new Vector3Int(1, 0, 0), // right
-            new Vector3Int(-1, 0, 0), // left
-            new Vector3Int(0, 1, 0), // top
-            new Vector3Int(0, -1, 0), // bottom
-            new Vector3Int(0, 0, 1), // front
-            new Vector3Int(0, 0, -1), // back
+            new int3(1, 0, 0), // right
+            new int3(-1, 0, 0), // left
+            new int3(0, 1, 0), // top
+            new int3(0, -1, 0), // bottom
+            new int3(0, 0, 1), // front
+            new int3(0, 0, -1), // back
         };
 
-        public static readonly Vector3[] CubeVertices =
+        public static readonly float3[] CubeVertices =
         {
-            new Vector3(0, 0, 0),
-            new Vector3(1, 0, 0),
-            new Vector3(1, 0, 1),
-            new Vector3(0, 0, 1), 
-            new Vector3(0, 1, 0), 
-            new Vector3(1, 1, 0),
-            new Vector3(1, 1, 1),
-            new Vector3(0, 1, 1)
+            new float3(0, 0, 0),
+            new float3(1, 0, 0),
+            new float3(1, 0, 1),
+            new float3(0, 0, 1), 
+            new float3(0, 1, 0), 
+            new float3(1, 1, 0),
+            new float3(1, 1, 1),
+            new float3(0, 1, 1)
         };
 
         public static readonly int[] CubeFaces =

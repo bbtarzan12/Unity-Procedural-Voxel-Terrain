@@ -37,9 +37,9 @@ public static class NoiseGenerator
         }
     }
     
-    public static JobHandle Generate(NativeArray<Voxel>voxels, Vector3Int chunkPosition, int chunkSize)
+    public static JobHandle Generate(NativeArray<Voxel>voxels, int3 chunkPosition, int chunkSize)
     {
-        GenerateNoiseJob noiseJob = new GenerateNoiseJob {chunkPosition = VoxelUtil.ToInt3(chunkPosition), chunkSize = chunkSize, voxels = voxels};
+        GenerateNoiseJob noiseJob = new GenerateNoiseJob {chunkPosition = chunkPosition, chunkSize = chunkSize, voxels = voxels};
         JobHandle noiseJobHandle = noiseJob.Schedule(voxels.Length, 32);
         JobHandle.ScheduleBatchedJobs();
 
