@@ -12,11 +12,16 @@ public class TerrainGenerator : MonoBehaviour
     [SerializeField] Material chunkMaterial;
     [SerializeField] int maxGenerateChunksInFrame = 5;
     [SerializeField] VoxelGenerator.SimplifyingMethod simplifyingMethod;
+
+    class ChunkNode : FastPriorityQueueNode
+    {
+        public Vector3Int chunkPosition;
+    } 
     
     Dictionary<Vector3Int, Chunk> chunks = new Dictionary<Vector3Int, Chunk>();
     Vector3Int lastTargetChunkPosition = new Vector3Int(int.MinValue, int.MaxValue, int.MinValue);
-    SimplePriorityQueue<Vector3Int> generateChunkQueue = new SimplePriorityQueue<Vector3Int>();
-    
+    FastPriorityQueue<ChunkNode> generateChunkQueue = new FastPriorityQueue<ChunkNode>(10000);
+
     public int ChunkSize => chunkSize;
     public Material ChunkMaterial => chunkMaterial;
     public VoxelGenerator.SimplifyingMethod SimplifyingMethod => simplifyingMethod;
@@ -42,16 +47,16 @@ public class TerrainGenerator : MonoBehaviour
         if (lastTargetChunkPosition == targetPosition)
             return;
 
-        foreach (Vector3Int chunkPosition in generateChunkQueue)
+        foreach (ChunkNode chunkNode in generateChunkQueue)
         {
-            Vector3Int deltaPosition = targetPosition - chunkPosition;
+            Vector3Int deltaPosition = targetPosition - chunkNode.chunkPosition;
             if (chunkSpawnSize.x < Mathf.Abs(deltaPosition.x) || chunkSpawnSize.y < Mathf.Abs(deltaPosition.y) || chunkSpawnSize.z < Mathf.Abs(deltaPosition.z))
             {
-                generateChunkQueue.Remove(chunkPosition);
+                generateChunkQueue.Remove(chunkNode);
                 continue;
             }
             
-            generateChunkQueue.UpdatePriority(chunkPosition, (targetPosition - chunkPosition).sqrMagnitude);
+            generateChunkQueue.UpdatePriority(chunkNode, (targetPosition - chunkNode.chunkPosition).sqrMagnitude);
         }
 
         for (int x = targetPosition.x - chunkSpawnSize.x; x <= targetPosition.x + chunkSpawnSize.x; x++)
@@ -63,8 +68,13 @@ public class TerrainGenerator : MonoBehaviour
                     Vector3Int chunkPosition = new Vector3Int(x, y, z);
                     if (chunks.ContainsKey(chunkPosition))
                         continue;
+
+                    ChunkNode newNode = new ChunkNode {chunkPosition = chunkPosition};
                     
-                    generateChunkQueue.EnqueueWithoutDuplicates(chunkPosition, (targetPosition - chunkPosition).sqrMagnitude);
+                    if(generateChunkQueue.Contains(newNode))
+                        continue;
+                    
+                    generateChunkQueue.Enqueue(newNode, (targetPosition - chunkPosition).sqrMagnitude);
                 }
             }
         }
@@ -91,7 +101,7 @@ public class TerrainGenerator : MonoBehaviour
             if (numChunks >= maxGenerateChunksInFrame)
                 return;
 
-            Vector3Int chunkPosition = generateChunkQueue.Dequeue();
+            Vector3Int chunkPosition = generateChunkQueue.Dequeue().chunkPosition;
             GenerateChunk(chunkPosition);
             numChunks++;
         }
