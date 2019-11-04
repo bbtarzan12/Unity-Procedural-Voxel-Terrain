@@ -88,7 +88,7 @@ namespace OptIn.Voxel
 
                 for (int direction = 0; direction < 6; direction++)
                 {
-                    AddTriangleByDirection(direction, gridPosition, counter, vertices, normals, triangles);
+                    AddQuadByDirection(direction, 1.0f, 1.0f, gridPosition, counter, vertices, normals, triangles);
                 }
             }
         }
@@ -125,7 +125,7 @@ namespace OptIn.Voxel
                     if (TransparencyCheck(voxels, neighborPosition, chunkSize))
                         continue;
 
-                    AddTriangleByDirection(direction, gridPosition, counter, vertices, normals, triangles);
+                    AddQuadByDirection(direction, 1.0f, 1.0f, gridPosition, counter, vertices, normals, triangles);
                 }
             }
         }
@@ -464,24 +464,6 @@ namespace OptIn.Voxel
                 vertex[DirectionAlignedY[direction]] *= height;
                 
                 vertices[numVertices + i] = vertex + VoxelUtil.ToVector3(gridPosition);
-                normals[numVertices + i] = VoxelDirectionOffsets[direction];
-            }
-
-            int numTriangles = numFace * 6;
-            for (int i = 0; i < 6; i++)
-            {
-                triangles[numTriangles + i] = CubeIndices[direction * 6 + i] + numVertices;
-            }
-        }
-
-        static void AddTriangleByDirection(int direction, int3 gridPosition, NativeCounter.Concurrent counter, NativeArray<Vector3> vertices, NativeArray<Vector3> normals, NativeArray<int> triangles)
-        {
-            int numFace = counter.Increment();
-
-            int numVertices = numFace * 4;
-            for (int i = 0; i < 4; i++)
-            {
-                vertices[numVertices + i] = CubeVertices[CubeFaces[i + direction * 4]] + VoxelUtil.ToVector3(gridPosition);
                 normals[numVertices + i] = VoxelDirectionOffsets[direction];
             }
 
