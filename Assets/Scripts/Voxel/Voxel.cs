@@ -32,13 +32,15 @@ namespace OptIn.Voxel
             public NativeArray<float3> nativeVertices;
             public NativeArray<float3> nativeNormals;
             public NativeArray<int> nativeIndices;
-            public NativeCounter counter;
+            public NativeArray<float2> nativeUVs;
             public JobHandle jobHandle;
+            NativeCounter counter;
 
             public NativeMeshData(int chunkSize)
             {
                 nativeVertices = new NativeArray<float3>(12 * chunkSize * chunkSize * chunkSize, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
                 nativeNormals = new NativeArray<float3>(12 * chunkSize * chunkSize * chunkSize, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+                nativeUVs = new NativeArray<float2>(12 * chunkSize * chunkSize * chunkSize, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
                 nativeIndices = new NativeArray<int>(18 * chunkSize * chunkSize * chunkSize, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
                 counter = new NativeCounter(Allocator.TempJob);
             }
@@ -62,6 +64,9 @@ namespace OptIn.Voxel
                 
                 if(counter.IsCreated)
                     counter.Dispose();
+
+                if (nativeUVs.IsCreated)
+                    nativeUVs.Dispose();
             }
 
             public void ScheduleMeshingJob(NativeArray<Voxel> voxels, int chunkSize, SimplifyingMethod method)
@@ -99,6 +104,7 @@ namespace OptIn.Voxel
                     chunkSize = chunkSize,
                     vertices = nativeVertices,
                     normals = nativeNormals,
+                    uvs = nativeUVs,
                     indices = nativeIndices,
                     counter = counter.ToConcurrent(),
                 };
@@ -115,6 +121,7 @@ namespace OptIn.Voxel
                     chunkSize = chunkSize,
                     vertices = nativeVertices,
                     normals = nativeNormals,
+                    uvs = nativeUVs,
                     indices = nativeIndices,
                     counter = counter.ToConcurrent(),
                 };
@@ -131,6 +138,7 @@ namespace OptIn.Voxel
                     chunkSize = chunkSize,
                     vertices = nativeVertices,
                     normals = nativeNormals,
+                    uvs = nativeUVs,
                     indices = nativeIndices,
                     counter = counter.ToConcurrent(),
                 };
@@ -153,6 +161,9 @@ namespace OptIn.Voxel
             public NativeArray<float3> normals;
 
             [NativeDisableParallelForRestriction] [WriteOnly]
+            public NativeArray<float2> uvs;
+            
+            [NativeDisableParallelForRestriction] [WriteOnly]
             public NativeArray<int> indices;
 
             [WriteOnly] public NativeCounter.Concurrent counter;
@@ -172,7 +183,7 @@ namespace OptIn.Voxel
                     if (TransparencyCheck(voxels, neighborPosition, chunkSize))
                         continue;
 
-                    AddQuadByDirection(direction, 1.0f, 1.0f, gridPosition, counter, vertices, normals, indices);
+                    AddQuadByDirection(direction, 1.0f, 1.0f, gridPosition, counter, vertices, normals, uvs, indices);
                 }
             }
         }
@@ -189,6 +200,9 @@ namespace OptIn.Voxel
             [NativeDisableParallelForRestriction] [WriteOnly]
             public NativeArray<float3> normals;
 
+            [NativeDisableParallelForRestriction] [WriteOnly]
+            public NativeArray<float2> uvs;
+            
             [NativeDisableParallelForRestriction] [WriteOnly]
             public NativeArray<int> indices;
             
@@ -234,7 +248,7 @@ namespace OptIn.Voxel
                                         break;
                                 }
 
-                                AddQuadByDirection(direction, 1.0f, height, gridPosition, counter, vertices, normals, indices);
+                                AddQuadByDirection(direction, 1.0f, height, gridPosition, counter, vertices, normals, uvs, indices);
                                 y += height;
                             }
                         }
@@ -254,6 +268,9 @@ namespace OptIn.Voxel
 
             [NativeDisableParallelForRestriction] [WriteOnly]
             public NativeArray<float3> normals;
+
+            [NativeDisableParallelForRestriction] [WriteOnly]
+            public NativeArray<float2> uvs;
 
             [NativeDisableParallelForRestriction] [WriteOnly]
             public NativeArray<int> indices;
@@ -347,7 +364,7 @@ namespace OptIn.Voxel
                                     }
                                 }
 
-                                AddQuadByDirection(direction, width, height, gridPosition, counter, vertices, normals, indices);
+                                AddQuadByDirection(direction, width, height, gridPosition, counter, vertices, normals, uvs, indices);
                                 y += height;
                             }
                         }
@@ -373,7 +390,7 @@ namespace OptIn.Voxel
             return voxels[VoxelUtil.To1DIndex(position, chunkSize)].data != Voxel.VoxelType.Air;
         }
 
-        static void AddQuadByDirection(int direction, float width, float height, int3 gridPosition, NativeCounter.Concurrent counter, NativeArray<float3> vertices, NativeArray<float3> normals, NativeArray<int> indices)
+        static void AddQuadByDirection(int direction, float width, float height, int3 gridPosition, NativeCounter.Concurrent counter, NativeArray<float3> vertices, NativeArray<float3> normals, NativeArray<float2> uvs, NativeArray<int> indices)
         {
             int numFace = counter.Increment();
             
@@ -381,12 +398,16 @@ namespace OptIn.Voxel
             for (int i = 0; i < 4; i++)
             {
                 float3 vertex = CubeVertices[CubeFaces[i + direction * 4]];
-
                 vertex[DirectionAlignedX[direction]] *= width;
                 vertex[DirectionAlignedY[direction]] *= height;
+
+                float2 uv = CubeUVs[i];
+                uv.x *= width;
+                uv.y *= height;
                 
                 vertices[numVertices + i] = vertex + gridPosition;
                 normals[numVertices + i] = VoxelDirectionOffsets[direction];
+                uvs[numVertices + i] = uv;
             }
 
             int numindices = numFace * 6;
@@ -430,6 +451,11 @@ namespace OptIn.Voxel
             1, 0, 2, 3, // bottom
             2, 3, 6, 7, // front
             0, 1, 4, 5, // back
+        };
+
+        public static readonly float2[] CubeUVs =
+        {
+            new float2(0,0.5f), new float2(0.5f, 0.5f), new float2(0,1), new float2(0.5f,1),    
         };
 
         public static readonly int[] CubeIndices =

@@ -81,8 +81,10 @@ public class Chunk : MonoBehaviour
             mesh.SetVertices(meshData.nativeVertices, 0, verticeSize);
             mesh.SetIndices(meshData.nativeIndices, 0, indicesSize, MeshTopology.Triangles, 0);
             mesh.SetNormals(meshData.nativeNormals, 0, verticeSize);
+            mesh.SetUVs(0, meshData.nativeUVs, 0, verticeSize);
 
             mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
             
             meshCollider.sharedMesh = mesh;
         }
