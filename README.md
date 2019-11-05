@@ -4,6 +4,8 @@ Procedural Voxel Terrain Project
 
 ![Main](./images/main.png)
 
+# Mesh Optimization
+
 ## Stupid Method
 
 ![Stupid](./images/stupid.png)
@@ -19,6 +21,10 @@ Procedural Voxel Terrain Project
 ## Greedy Meshing
 
 ![Stupid](./images/greedy_meshing.png)
+
+# Texture Mapping
+
+![Texture Mapping](./images/texturing.png)
 
 ## License
 
