@@ -1,4 +1,4 @@
-﻿﻿using System;
+﻿﻿﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using OptIn.Voxel.Utils;
@@ -12,14 +12,22 @@ namespace OptIn.Voxel
 {
     public struct Voxel
     {
-
-        public enum VoxelType { Air, Block }
+        public enum VoxelType { Air, Grass, Dirt, Stone }
 
         public VoxelType data;
     }
 
     public static class VoxelGenerator
     {
+        public static void InitializeShaderParameter()
+        {
+            Shader.SetGlobalInt("_AtlasX", AtlasSize.x);
+            Shader.SetGlobalInt("_AtlasY", AtlasSize.y);
+            Shader.SetGlobalVector("_AtlasRec", new Vector4(1.0f / AtlasSize.x, 1.0f / AtlasSize.y));
+        }
+        
+        public static readonly int2 AtlasSize = new int2(8, 8);
+        
         public enum SimplifyingMethod
         {
             Culling,
@@ -32,7 +40,7 @@ namespace OptIn.Voxel
             public NativeArray<float3> nativeVertices;
             public NativeArray<float3> nativeNormals;
             public NativeArray<int> nativeIndices;
-            public NativeArray<float2> nativeUVs;
+            public NativeArray<float4> nativeUVs;
             public JobHandle jobHandle;
             NativeCounter counter;
 
@@ -40,7 +48,7 @@ namespace OptIn.Voxel
             {
                 nativeVertices = new NativeArray<float3>(12 * chunkSize * chunkSize * chunkSize, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
                 nativeNormals = new NativeArray<float3>(12 * chunkSize * chunkSize * chunkSize, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
-                nativeUVs = new NativeArray<float2>(12 * chunkSize * chunkSize * chunkSize, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+                nativeUVs = new NativeArray<float4>(12 * chunkSize * chunkSize * chunkSize, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
                 nativeIndices = new NativeArray<int>(18 * chunkSize * chunkSize * chunkSize, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
                 counter = new NativeCounter(Allocator.TempJob);
             }
@@ -161,7 +169,7 @@ namespace OptIn.Voxel
             public NativeArray<float3> normals;
 
             [NativeDisableParallelForRestriction] [WriteOnly]
-            public NativeArray<float2> uvs;
+            public NativeArray<float4> uvs;
             
             [NativeDisableParallelForRestriction] [WriteOnly]
             public NativeArray<int> indices;
@@ -183,7 +191,7 @@ namespace OptIn.Voxel
                     if (TransparencyCheck(voxels, neighborPosition, chunkSize))
                         continue;
 
-                    AddQuadByDirection(direction, 1.0f, 1.0f, gridPosition, counter, vertices, normals, uvs, indices);
+                    AddQuadByDirection(direction, voxel.data, 1.0f, 1.0f, gridPosition, counter, vertices, normals, uvs, indices);
                 }
             }
         }
@@ -201,7 +209,7 @@ namespace OptIn.Voxel
             public NativeArray<float3> normals;
 
             [NativeDisableParallelForRestriction] [WriteOnly]
-            public NativeArray<float2> uvs;
+            public NativeArray<float4> uvs;
             
             [NativeDisableParallelForRestriction] [WriteOnly]
             public NativeArray<int> indices;
@@ -248,7 +256,7 @@ namespace OptIn.Voxel
                                         break;
                                 }
 
-                                AddQuadByDirection(direction, 1.0f, height, gridPosition, counter, vertices, normals, uvs, indices);
+                                AddQuadByDirection(direction, voxel.data, 1.0f, height, gridPosition, counter, vertices, normals, uvs, indices);
                                 y += height;
                             }
                         }
@@ -270,7 +278,7 @@ namespace OptIn.Voxel
             public NativeArray<float3> normals;
 
             [NativeDisableParallelForRestriction] [WriteOnly]
-            public NativeArray<float2> uvs;
+            public NativeArray<float4> uvs;
 
             [NativeDisableParallelForRestriction] [WriteOnly]
             public NativeArray<int> indices;
@@ -364,7 +372,7 @@ namespace OptIn.Voxel
                                     }
                                 }
 
-                                AddQuadByDirection(direction, width, height, gridPosition, counter, vertices, normals, uvs, indices);
+                                AddQuadByDirection(direction, voxel.data, width, height, gridPosition, counter, vertices, normals, uvs, indices);
                                 y += height;
                             }
                         }
@@ -390,7 +398,7 @@ namespace OptIn.Voxel
             return voxels[VoxelUtil.To1DIndex(position, chunkSize)].data != Voxel.VoxelType.Air;
         }
 
-        static void AddQuadByDirection(int direction, float width, float height, int3 gridPosition, NativeCounter.Concurrent counter, NativeArray<float3> vertices, NativeArray<float3> normals, NativeArray<float2> uvs, NativeArray<int> indices)
+        static void AddQuadByDirection(int direction, Voxel.VoxelType data, float width, float height, int3 gridPosition, NativeCounter.Concurrent counter, NativeArray<float3> vertices, NativeArray<float3> normals, NativeArray<float4> uvs, NativeArray<int> indices)
         {
             int numFace = counter.Increment();
             
@@ -401,10 +409,21 @@ namespace OptIn.Voxel
                 vertex[DirectionAlignedX[direction]] *= width;
                 vertex[DirectionAlignedY[direction]] *= height;
 
-                float2 uv = CubeUVs[i];
-                uv.x *= width;
-                uv.y *= height;
-                
+                int atlasIndex = (int) data * 6 + direction;
+                int2 atlasPosition = new int2
+                {
+                    x = atlasIndex % AtlasSize.x,
+                    y = atlasIndex / AtlasSize.x
+                };
+
+                float4 uv = new float4
+                {
+                    x = CubeUVs[i].x * width, 
+                    y = CubeUVs[i].y * height,
+                    z = atlasPosition.x, 
+                    w = atlasPosition.y
+                };
+
                 vertices[numVertices + i] = vertex + gridPosition;
                 normals[numVertices + i] = VoxelDirectionOffsets[direction];
                 uvs[numVertices + i] = uv;
@@ -455,7 +474,7 @@ namespace OptIn.Voxel
 
         public static readonly float2[] CubeUVs =
         {
-            new float2(0,0.5f), new float2(0.5f, 0.5f), new float2(0,1), new float2(0.5f,1),    
+            new float2(0, 0), new float2(1.0f, 0), new float2(0, 1.0f), new float2(1.0f, 1.0f)    
         };
 
         public static readonly int[] CubeIndices =

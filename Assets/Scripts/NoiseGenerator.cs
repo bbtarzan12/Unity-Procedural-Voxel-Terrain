@@ -11,13 +11,26 @@ public static class NoiseGenerator
     static void RandomVoxel(out Voxel voxel, int3 worldPosition)
     {
         voxel = new Voxel();
-        float density = -worldPosition.y;
-        density += SimplexNoise.Noise.CalcPixel2DFractal(worldPosition.x, worldPosition.z, 0.003f, 1) * 25f;
-        density += SimplexNoise.Noise.CalcPixel2DFractal(worldPosition.x, worldPosition.z, 0.03f, 3) * 5f;
-        density += SimplexNoise.Noise.CalcPixel2DFractal(worldPosition.x, worldPosition.z, 0.09f, 5) * 1f;
+        int density = -worldPosition.y;
+        density += (int)(SimplexNoise.Noise.CalcPixel2DFractal(worldPosition.x, worldPosition.z, 0.003f, 1) * 25f);
+        density += (int)(SimplexNoise.Noise.CalcPixel2DFractal(worldPosition.x, worldPosition.z, 0.03f, 3) * 5f);
+        density += (int)(SimplexNoise.Noise.CalcPixel2DFractal(worldPosition.x, worldPosition.z, 0.09f, 5) * 1f);
 
-        if (density > 0)
-            voxel.data = Voxel.VoxelType.Block;
+        int level = 0;
+        if (density >= level)
+        {
+            voxel.data = Voxel.VoxelType.Grass;
+            level += 1;
+        }
+
+        if (density >= level)
+        {
+            voxel.data = Voxel.VoxelType.Dirt;
+            level += (int) (SimplexNoise.Noise.CalcPixel2DFractal(worldPosition.x, worldPosition.z, 0.01f, 1) * 10f) + 3;
+        }
+
+        if (density >= level)
+            voxel.data = Voxel.VoxelType.Stone;
     }
     
     [BurstCompile]

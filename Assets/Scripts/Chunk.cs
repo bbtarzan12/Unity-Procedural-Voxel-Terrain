@@ -36,6 +36,8 @@ public class Chunk : MonoBehaviour
         meshRenderer = GetComponent<MeshRenderer>();
         meshCollider = GetComponent<MeshCollider>();
         mesh = new Mesh {indexFormat = IndexFormat.UInt32};
+        
+        VoxelGenerator.InitializeShaderParameter();
     }
 
     void OnDestroy()
