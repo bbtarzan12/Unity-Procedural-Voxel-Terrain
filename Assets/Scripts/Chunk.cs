@@ -25,7 +25,7 @@ public class Chunk : MonoBehaviour
     MeshRenderer meshRenderer;
     MeshCollider meshCollider;
 
-    VoxelGenerator.NativeMeshData meshData;
+    VoxelMeshBuilder.NativeMeshData meshData;
     JobHandle noiseJobHandle;
 
     public bool Dirty => dirty;
@@ -36,8 +36,8 @@ public class Chunk : MonoBehaviour
         meshRenderer = GetComponent<MeshRenderer>();
         meshCollider = GetComponent<MeshCollider>();
         mesh = new Mesh {indexFormat = IndexFormat.UInt32};
-        
-        VoxelGenerator.InitializeShaderParameter();
+
+        VoxelMeshBuilder.InitializeShaderParameter();
     }
 
     void OnDestroy()
@@ -81,9 +81,10 @@ public class Chunk : MonoBehaviour
         {
             mesh.Clear();
             mesh.SetVertices(meshData.nativeVertices, 0, verticeSize);
-            mesh.SetIndices(meshData.nativeIndices, 0, indicesSize, MeshTopology.Triangles, 0);
             mesh.SetNormals(meshData.nativeNormals, 0, verticeSize);
+            mesh.SetColors(meshData.nativeColors, 0, verticeSize);
             mesh.SetUVs(0, meshData.nativeUVs, 0, verticeSize);
+            mesh.SetIndices(meshData.nativeIndices, 0, indicesSize, MeshTopology.Triangles, 0);
 
             mesh.RecalculateNormals();
             mesh.RecalculateBounds();
@@ -101,7 +102,7 @@ public class Chunk : MonoBehaviour
             return;
 
         meshData?.Dispose();
-        meshData = new VoxelGenerator.NativeMeshData(generator.ChunkSize);
+        meshData = new VoxelMeshBuilder.NativeMeshData(generator.ChunkSize);
         meshData.ScheduleMeshingJob(voxels, generator.ChunkSize, generator.SimplifyingMethod);
         
         isUpdating = true;

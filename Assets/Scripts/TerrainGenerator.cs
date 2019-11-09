@@ -11,7 +11,7 @@ public class TerrainGenerator : MonoBehaviour
     [SerializeField] Vector3Int chunkSpawnSize = Vector3Int.one * 3;
     [SerializeField] Material chunkMaterial;
     [SerializeField] int maxGenerateChunksInFrame = 5;
-    [SerializeField] VoxelGenerator.SimplifyingMethod simplifyingMethod;
+    [SerializeField] VoxelMeshBuilder.SimplifyingMethod simplifyingMethod;
 
     class ChunkNode : FastPriorityQueueNode
     {
@@ -24,7 +24,7 @@ public class TerrainGenerator : MonoBehaviour
 
     public int ChunkSize => chunkSize;
     public Material ChunkMaterial => chunkMaterial;
-    public VoxelGenerator.SimplifyingMethod SimplifyingMethod => simplifyingMethod;
+    public VoxelMeshBuilder.SimplifyingMethod SimplifyingMethod => simplifyingMethod;
 
     void Update()
     {

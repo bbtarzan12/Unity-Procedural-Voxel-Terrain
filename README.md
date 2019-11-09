@@ -26,6 +26,14 @@ Procedural Voxel Terrain Project
 
 ![Texture Mapping](./images/texturing.png)
 
+# Ambient Occlusion
+
+![Ambient Occlusion](./images/ambient_occlusion.png)
+
+## With Greedy Meshing
+
+![Ambient Occlusion with Greedy Meshing](./images/ambient_occlusion_with_greedy_meshing.png)
+
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details

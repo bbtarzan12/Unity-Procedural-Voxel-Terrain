@@ -6,6 +6,9 @@
         _MainTex ("Albedo (RGB)", 2D) = "white" {}
         _Glossiness ("Smoothness", Range(0,1)) = 0.5
         _Metallic ("Metallic", Range(0,1)) = 0.0
+        _AOColor ("AO Color", Color) = (0,0,0,1)
+        _AOIntensity ("AO Intensity", Range(0, 1)) = 1.0
+		_AOPower ("AO Power", Range(1, 10)) = 1.0
     }
     SubShader
     {
@@ -26,6 +29,7 @@
         {
             float3 position;
             float4 custom_uv;
+            float4 color : COLOR;
         };
 
         half _Glossiness;
@@ -35,6 +39,10 @@
         int _AtlasX;
         int _AtlasY;
         fixed4 _AtlasRec;
+        
+        half4 _AOColor;
+		float _AOIntensity;
+		float _AOPower;
 
         // Add instancing support for this shader. You need to check 'Enable Instancing' on materials that use the shader.
         // See https://docs.unity3d.com/Manual/GPUInstancing.html for more information about instancing.
@@ -48,6 +56,10 @@
             UNITY_INITIALIZE_OUTPUT(Input, o);
             o.custom_uv = v.texcoord;
             o.position = v.vertex;
+            
+            
+            v.color.rgb = _AOColor;
+            v.color.a   = pow((1-v.color.a) * _AOIntensity, _AOPower );
         }
 
         void surf (Input IN, inout SurfaceOutputStandard o)
@@ -61,11 +73,11 @@
             // Albedo comes from a texture tinted by color
             fixed4 c = tex2Dgrad(_MainTex, atlasUV, ddx(atlasUV * _AtlasRec), ddy(atlasUV * _AtlasRec)) * _Color;
             //fixed4 c = tex2D(_MainTex, atlasUV) * _Color;
-            o.Albedo = c.rgb;
+            o.Albedo = lerp(c.rgb, IN.color.rgb, IN.color.a);
+			o.Alpha  = c.a;
             // Metallic and smoothness come from slider variables
             o.Metallic = _Metallic;
             o.Smoothness = _Glossiness;
-            o.Alpha = c.a;
         }
 
         
