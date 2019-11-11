@@ -122,4 +122,32 @@ public class TerrainGenerator : MonoBehaviour
         chunks.Add(chunkPosition, newChunk);
         return newChunk;
     }
+    
+    public bool GetChunk(Vector3 worldPosition, out Chunk chunk)
+    {
+        Vector3Int chunkPosition = VoxelUtil.WorldToChunk(worldPosition, chunkSize);
+        if (chunks.ContainsKey(chunkPosition))
+        {
+            chunk = chunks[chunkPosition];
+            return true;
+        }
+
+        chunk = null;
+        return false;
+    }
+
+    public bool GetVoxel(Vector3 worldPosition, out Voxel voxel)
+    {
+        Vector3Int chunkPosition = VoxelUtil.WorldToChunk(worldPosition, chunkSize);
+
+        if (GetChunk(chunkPosition, out Chunk chunk))
+        {
+            Vector3Int gridPosition = VoxelUtil.WorldToGrid(worldPosition);
+            if(chunk.GetVoxel(gridPosition, out voxel))
+                return true;
+        }
+        
+        voxel = Voxel.Empty;
+        return false;
+    }
 }

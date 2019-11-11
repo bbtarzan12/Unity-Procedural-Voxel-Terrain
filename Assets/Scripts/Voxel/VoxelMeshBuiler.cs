@@ -198,7 +198,7 @@ namespace OptIn.Voxel
 
                 for (int direction = 0; direction < 6; direction++)
                 {
-                    int3 neighborPosition = gridPosition + VoxelDirectionOffsets[direction];
+                    int3 neighborPosition = gridPosition + VoxelUtil.VoxelDirectionOffsets[direction];
 
                     if (TransparencyCheck(voxels, neighborPosition, chunkSize))
                         continue;
@@ -244,9 +244,9 @@ namespace OptIn.Voxel
                             {
                                 int3 gridPosition = new int3
                                 {
-                                    [DirectionAlignedX[direction]] = x,
-                                    [DirectionAlignedY[direction]] = y, 
-                                    [DirectionAlignedZ[direction]] = depth
+                                    [VoxelUtil.DirectionAlignedX[direction]] = x,
+                                    [VoxelUtil.DirectionAlignedY[direction]] = y, 
+                                    [VoxelUtil.DirectionAlignedZ[direction]] = depth
                                 };
 
                                 int index = VoxelUtil.To1DIndex(gridPosition, chunkSize);
@@ -260,7 +260,7 @@ namespace OptIn.Voxel
                                     continue;
                                 }
 
-                                int3 neighborPosition = gridPosition + VoxelDirectionOffsets[direction];
+                                int3 neighborPosition = gridPosition + VoxelUtil.VoxelDirectionOffsets[direction];
 
                                 if (TransparencyCheck(voxels, neighborPosition, chunkSize))
                                 {
@@ -272,7 +272,7 @@ namespace OptIn.Voxel
                                 for (height = 1; height + y < chunkSize; height++)
                                 {
                                     int3 nextPosition = gridPosition;
-                                    nextPosition[DirectionAlignedY[direction]] += height;
+                                    nextPosition[VoxelUtil.DirectionAlignedY[direction]] += height;
 
                                     int nextIndex = VoxelUtil.To1DIndex(nextPosition, chunkSize);
 
@@ -333,7 +333,7 @@ namespace OptIn.Voxel
                         {
                             for (int y = 0; y < chunkSize;)
                             {
-                                int3 gridPosition = new int3 {[DirectionAlignedX[direction]] = x, [DirectionAlignedY[direction]] = y, [DirectionAlignedZ[direction]] = depth};
+                                int3 gridPosition = new int3 {[VoxelUtil.DirectionAlignedX[direction]] = x, [VoxelUtil.DirectionAlignedY[direction]] = y, [VoxelUtil.DirectionAlignedZ[direction]] = depth};
 
                                 Voxel voxel = voxels[VoxelUtil.To1DIndex(gridPosition, chunkSize)];
 
@@ -349,7 +349,7 @@ namespace OptIn.Voxel
                                     continue;
                                 }
                                 
-                                int3 neighborPosition = gridPosition + VoxelDirectionOffsets[direction];
+                                int3 neighborPosition = gridPosition + VoxelUtil.VoxelDirectionOffsets[direction];
 
                                 if (TransparencyCheck(voxels, neighborPosition, chunkSize))
                                 {
@@ -365,7 +365,7 @@ namespace OptIn.Voxel
                                 for (height = 1; height + y < chunkSize; height++)
                                 {
                                     int3 nextPosition = gridPosition;
-                                    nextPosition[DirectionAlignedY[direction]] += height;
+                                    nextPosition[VoxelUtil.DirectionAlignedY[direction]] += height;
 
                                     Voxel nextVoxel = voxels[VoxelUtil.To1DIndex(nextPosition, chunkSize)];
                                     VoxelLight nextLight = lightData[VoxelUtil.To1DIndex(nextPosition, chunkSize)];
@@ -389,8 +389,8 @@ namespace OptIn.Voxel
                                     for (int dy = 0; dy < height; dy++)
                                     {
                                         int3 nextPosition = gridPosition;
-                                        nextPosition[DirectionAlignedX[direction]] += width;
-                                        nextPosition[DirectionAlignedY[direction]] += dy;
+                                        nextPosition[VoxelUtil.DirectionAlignedX[direction]] += width;
+                                        nextPosition[VoxelUtil.DirectionAlignedY[direction]] += dy;
 
                                         Voxel nextVoxel = voxels[VoxelUtil.To1DIndex(nextPosition, chunkSize)];
                                         VoxelLight nextLight = lightData[VoxelUtil.To1DIndex(nextPosition, chunkSize)];
@@ -410,8 +410,8 @@ namespace OptIn.Voxel
                                     for (int dy = 0; dy < height; dy++)
                                     {
                                         int3 nextPosition = gridPosition;
-                                        nextPosition[DirectionAlignedX[direction]] += width;
-                                        nextPosition[DirectionAlignedY[direction]] += dy;
+                                        nextPosition[VoxelUtil.DirectionAlignedX[direction]] += width;
+                                        nextPosition[VoxelUtil.DirectionAlignedY[direction]] += dy;
                                         hashMap.TryAdd(nextPosition, new Empty());
                                     }
                                 }
@@ -449,19 +449,18 @@ namespace OptIn.Voxel
             int numVertices = numFace * 4;
             for (int i = 0; i < 4; i++)
             {
-                float3 vertex;
-                vertex = CubeVertices[CubeFaces[i + direction * 4]];
-                vertex[DirectionAlignedX[direction]] *= width;
-                vertex[DirectionAlignedY[direction]] *= height;
+                float3 vertex = VoxelUtil.CubeVertices[VoxelUtil.CubeFaces[i + direction * 4]];
+                vertex[VoxelUtil.DirectionAlignedX[direction]] *= width;
+                vertex[VoxelUtil.DirectionAlignedY[direction]] *= height;
 
                 int atlasIndex = (int) data * 6 + direction;
                 int2 atlasPosition = new int2 {x = atlasIndex % AtlasSize.x, y = atlasIndex / AtlasSize.x};
 
-                float4 uv = new float4 {x = CubeUVs[i].x * width, y = CubeUVs[i].y * height, z = atlasPosition.x, w = atlasPosition.y};
+                float4 uv = new float4 {x = VoxelUtil.CubeUVs[i].x * width, y = VoxelUtil.CubeUVs[i].y * height, z = atlasPosition.x, w = atlasPosition.y};
 
                 colors[numVertices + i] = new Color(0, 0, 0, voxelLight.ambient[i + direction * 4]);
                 vertices[numVertices + i] = vertex + gridPosition;
-                normals[numVertices + i] = VoxelDirectionOffsets[direction];
+                normals[numVertices + i] = VoxelUtil.VoxelDirectionOffsets[direction];
                 uvs[numVertices + i] = uv;
             }
 
@@ -470,86 +469,13 @@ namespace OptIn.Voxel
             {
                 if (voxelLight.ambient[direction * 4] + voxelLight.ambient[direction * 4 + 3] < voxelLight.ambient[direction * 4 + 1] + voxelLight.ambient[direction * 4 + 2])
                 {
-                    indices[numindices + i] = CubeFlipedIndices[direction * 6 + i] + numVertices;
+                    indices[numindices + i] = VoxelUtil.CubeFlipedIndices[direction * 6 + i] + numVertices;
                 }
                 else
                 {
-                    indices[numindices + i] = CubeIndices[direction * 6 + i] + numVertices;
+                    indices[numindices + i] = VoxelUtil.CubeIndices[direction * 6 + i] + numVertices;
                 }
             }
         }
-
-        public static readonly int[] DirectionAlignedX = { 2, 2, 0, 0, 0, 0 };
-        public static readonly int[] DirectionAlignedY = { 1, 1, 2, 2, 1, 1 };
-        public static readonly int[] DirectionAlignedZ = { 0, 0, 1, 1, 2, 2 };
-
-        public static readonly int3[] VoxelDirectionOffsets =
-        {
-            new int3(1, 0, 0), // right
-            new int3(-1, 0, 0), // left
-            new int3(0, 1, 0), // top
-            new int3(0, -1, 0), // bottom
-            new int3(0, 0, 1), // front
-            new int3(0, 0, -1), // back
-        };
-
-        public static readonly float3[] CubeVertices =
-        {
-            new float3(0, 0, 0),
-            new float3(1, 0, 0),
-            new float3(1, 0, 1),
-            new float3(0, 0, 1), 
-            new float3(0, 1, 0), 
-            new float3(1, 1, 0),
-            new float3(1, 1, 1),
-            new float3(0, 1, 1)
-        };
-
-        public static readonly int[] CubeFaces =
-        {
-            1, 2, 5, 6, // right
-            3, 0, 7, 4, // left
-            4, 5, 7, 6, // top
-            1, 0, 2, 3, // bottom
-            2, 3, 6, 7, // front
-            0, 1, 4, 5, // back
-        };
-
-        public static readonly float2[] CubeUVs =
-        {
-            new float2(0, 0), new float2(1.0f, 0), new float2(0, 1.0f), new float2(1.0f, 1.0f)    
-        };
-
-        public static readonly int[] CubeIndices =
-        {
-            0, 3, 1, 
-            0, 2, 3, //face right
-            0, 2, 1, 
-            1, 2, 3, //face left
-            0, 3, 1, 
-            0, 2, 3, //face top
-            0, 2, 1, 
-            1, 2, 3, //face bottom
-            0, 3, 1,                        
-            0, 2, 3, //face front
-            0, 2, 1, 
-            1, 2, 3, //face back
-        };
-        
-        public static readonly int[] CubeFlipedIndices =
-        {
-            0, 2, 1, 
-            1, 2, 3, //face right
-            0, 3, 1, 
-            0, 2, 3, //face left
-            0, 2, 1, 
-            1, 2, 3, //face top
-            0, 3, 1, 
-            0, 2, 3, //face bottom
-            0, 2, 1,                        
-            1, 2, 3, //face front
-            0, 3, 1, 
-            0, 2, 3, //face back
-        };
     }
 }

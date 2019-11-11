@@ -52,7 +52,7 @@ namespace OptIn.Voxel
 
                 for (int direction = 0; direction < 6; direction++)
                 {
-                    int3 neighborPosition = gridPosition + VoxelMeshBuilder.VoxelDirectionOffsets[direction];
+                    int3 neighborPosition = gridPosition + VoxelUtil.VoxelDirectionOffsets[direction];
                     if (VoxelMeshBuilder.TransparencyCheck(voxels, neighborPosition, chunkSize))
                         continue;
                     
@@ -67,35 +67,35 @@ namespace OptIn.Voxel
                     int3 topRightCorner = gridPosition;
                     int3 rightDownCorner = gridPosition;
 
-                    down[VoxelMeshBuilder.DirectionAlignedY[direction]] -= 1;
-                    left[VoxelMeshBuilder.DirectionAlignedX[direction]] -= 1;
-                    top[VoxelMeshBuilder.DirectionAlignedY[direction]] += 1;
-                    right[VoxelMeshBuilder.DirectionAlignedX[direction]] += 1;
+                    down[VoxelUtil.DirectionAlignedY[direction]] -= 1;
+                    left[VoxelUtil.DirectionAlignedX[direction]] -= 1;
+                    top[VoxelUtil.DirectionAlignedY[direction]] += 1;
+                    right[VoxelUtil.DirectionAlignedX[direction]] += 1;
 
-                    leftDownCorner[VoxelMeshBuilder.DirectionAlignedX[direction]] -= 1;
-                    leftDownCorner[VoxelMeshBuilder.DirectionAlignedY[direction]] -= 1;
+                    leftDownCorner[VoxelUtil.DirectionAlignedX[direction]] -= 1;
+                    leftDownCorner[VoxelUtil.DirectionAlignedY[direction]] -= 1;
             
-                    topLeftCorner[VoxelMeshBuilder.DirectionAlignedX[direction]] -= 1;
-                    topLeftCorner[VoxelMeshBuilder.DirectionAlignedY[direction]] += 1;
+                    topLeftCorner[VoxelUtil.DirectionAlignedX[direction]] -= 1;
+                    topLeftCorner[VoxelUtil.DirectionAlignedY[direction]] += 1;
             
-                    topRightCorner[VoxelMeshBuilder.DirectionAlignedX[direction]] += 1;
-                    topRightCorner[VoxelMeshBuilder.DirectionAlignedY[direction]] += 1;
+                    topRightCorner[VoxelUtil.DirectionAlignedX[direction]] += 1;
+                    topRightCorner[VoxelUtil.DirectionAlignedY[direction]] += 1;
                 
-                    rightDownCorner[VoxelMeshBuilder.DirectionAlignedX[direction]] += 1;
-                    rightDownCorner[VoxelMeshBuilder.DirectionAlignedY[direction]] -= 1;  
+                    rightDownCorner[VoxelUtil.DirectionAlignedX[direction]] += 1;
+                    rightDownCorner[VoxelUtil.DirectionAlignedY[direction]] -= 1;  
                     
                     int3* neighbors = stackalloc int3[] {down, leftDownCorner, left, topLeftCorner, top, topRightCorner, right, rightDownCorner};
 
                     for (int i = 0; i < 8; i++)
                     {
-                        neighbors[i][VoxelMeshBuilder.DirectionAlignedZ[direction]] += (direction % 2 == 0) ? 1 : -1;
+                        neighbors[i][VoxelUtil.DirectionAlignedZ[direction]] += (direction % 2 == 0) ? 1 : -1;
                     }
 
                     for (int i = 0; i < 4; i++)
                     {
-                        bool side1 = VoxelMeshBuilder.TransparencyCheck(voxels, neighbors[AONeighborOffsets[i * 3]], chunkSize);
-                        bool corner = VoxelMeshBuilder.TransparencyCheck(voxels, neighbors[AONeighborOffsets[i * 3 + 1]], chunkSize);
-                        bool side2 = VoxelMeshBuilder.TransparencyCheck(voxels, neighbors[AONeighborOffsets[i * 3 + 2]], chunkSize);
+                        bool side1 = VoxelMeshBuilder.TransparencyCheck(voxels, neighbors[VoxelUtil.AONeighborOffsets[i * 3]], chunkSize);
+                        bool corner = VoxelMeshBuilder.TransparencyCheck(voxels, neighbors[VoxelUtil.AONeighborOffsets[i * 3 + 1]], chunkSize);
+                        bool side2 = VoxelMeshBuilder.TransparencyCheck(voxels, neighbors[VoxelUtil.AONeighborOffsets[i * 3 + 2]], chunkSize);
                         
                         if (side1 && side2)
                         {
@@ -127,13 +127,5 @@ namespace OptIn.Voxel
             jobHandle.Complete();
             return nativeLightData;
         }
-        
-        public static readonly int[] AONeighborOffsets =
-        {
-            0, 1, 2,
-            6, 7, 0,
-            2, 3, 4,
-            4, 5, 6,
-        };
     }
 }

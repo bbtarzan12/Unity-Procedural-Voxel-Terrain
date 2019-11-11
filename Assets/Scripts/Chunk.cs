@@ -15,6 +15,9 @@ public class Chunk : MonoBehaviour
 {
     TerrainGenerator generator;
     Vector3Int chunkPosition;
+    int chunkSize;
+    
+    bool initialized;
     bool dirty;
     bool isUpdating;
     NativeArray<Voxel> voxels;
@@ -59,12 +62,14 @@ public class Chunk : MonoBehaviour
         generator = parent;
 
         meshRenderer.material = generator.ChunkMaterial;
+        chunkSize = generator.ChunkSize;
 
-        voxels = new NativeArray<Voxel>(generator.ChunkSize * generator.ChunkSize * generator.ChunkSize, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
-        noiseJobHandle = NoiseGenerator.Generate(voxels, VoxelUtil.ToInt3(chunkPosition), generator.ChunkSize);
+        voxels = new NativeArray<Voxel>(chunkSize * chunkSize * chunkSize, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
+        noiseJobHandle = NoiseGenerator.Generate(voxels, VoxelUtil.ToInt3(chunkPosition), chunkSize);
         yield return new WaitUntil(() => noiseJobHandle.IsCompleted);
         noiseJobHandle.Complete();
         dirty = true;
+        initialized = true;
     }
 
     void LateUpdate()
@@ -102,10 +107,28 @@ public class Chunk : MonoBehaviour
             return;
 
         meshData?.Dispose();
-        meshData = new VoxelMeshBuilder.NativeMeshData(generator.ChunkSize);
-        meshData.ScheduleMeshingJob(voxels, generator.ChunkSize, generator.SimplifyingMethod);
+        meshData = new VoxelMeshBuilder.NativeMeshData(chunkSize);
+        meshData.ScheduleMeshingJob(voxels, chunkSize, generator.SimplifyingMethod);
         
         isUpdating = true;
         dirty = false;
+    }
+    
+    public bool GetVoxel(Vector3Int gridPosition, out Voxel voxel)
+    {
+        if (!initialized)
+        {
+            voxel = Voxel.Empty;
+            return false;
+        }
+        
+        if (!VoxelUtil.BoundaryCheck(chunkSize, gridPosition))
+        {
+            voxel = Voxel.Empty;
+            return false;
+        }
+
+        voxel = voxels[VoxelUtil.To1DIndex(gridPosition, chunkSize)];
+        return true;
     }
 }
