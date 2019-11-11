@@ -15,7 +15,7 @@ public class Chunk : MonoBehaviour
 {
     TerrainGenerator generator;
     Vector3Int chunkPosition;
-    int chunkSize;
+    Vector3Int chunkSize;
     
     bool initialized;
     bool dirty;
@@ -64,8 +64,8 @@ public class Chunk : MonoBehaviour
         meshRenderer.material = generator.ChunkMaterial;
         chunkSize = generator.ChunkSize;
 
-        voxels = new NativeArray<Voxel>(chunkSize * chunkSize * chunkSize, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
-        noiseJobHandle = NoiseGenerator.Generate(voxels, VoxelUtil.ToInt3(chunkPosition), chunkSize);
+        voxels = new NativeArray<Voxel>(chunkSize.x * chunkSize.y * chunkSize.z, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
+        noiseJobHandle = NoiseGenerator.Generate(voxels, VoxelUtil.ToInt3(chunkPosition), VoxelUtil.ToInt3(chunkSize));
         yield return new WaitUntil(() => noiseJobHandle.IsCompleted);
         noiseJobHandle.Complete();
         dirty = true;
@@ -107,8 +107,8 @@ public class Chunk : MonoBehaviour
             return;
 
         meshData?.Dispose();
-        meshData = new VoxelMeshBuilder.NativeMeshData(chunkSize);
-        meshData.ScheduleMeshingJob(voxels, chunkSize, generator.SimplifyingMethod);
+        meshData = new VoxelMeshBuilder.NativeMeshData(VoxelUtil.ToInt3(chunkSize));
+        meshData.ScheduleMeshingJob(voxels, VoxelUtil.ToInt3(chunkSize), generator.SimplifyingMethod);
         
         isUpdating = true;
         dirty = false;

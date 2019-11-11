@@ -7,7 +7,7 @@ using UnityEngine;
 public class TerrainGenerator : MonoBehaviour
 {
     [SerializeField] Transform target;
-    [SerializeField] int chunkSize = 32;
+    [SerializeField] Vector3Int chunkSize = Vector3Int.one * 32;
     [SerializeField] Vector3Int chunkSpawnSize = Vector3Int.one * 3;
     [SerializeField] Material chunkMaterial;
     [SerializeField] int maxGenerateChunksInFrame = 5;
@@ -22,7 +22,7 @@ public class TerrainGenerator : MonoBehaviour
     Vector3Int lastTargetChunkPosition = new Vector3Int(int.MinValue, int.MaxValue, int.MinValue);
     FastPriorityQueue<ChunkNode> generateChunkQueue = new FastPriorityQueue<ChunkNode>(10000);
 
-    public int ChunkSize => chunkSize;
+    public Vector3Int ChunkSize => chunkSize;
     public Material ChunkMaterial => chunkMaterial;
     public VoxelMeshBuilder.SimplifyingMethod SimplifyingMethod => simplifyingMethod;
 

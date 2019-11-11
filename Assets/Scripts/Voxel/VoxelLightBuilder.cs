@@ -31,7 +31,7 @@ namespace OptIn.Voxel
         struct VoxelAOJob : IJobParallelFor
         {
             [ReadOnly] public NativeArray<Voxel> voxels;
-            [ReadOnly] public int chunkSize;
+            [ReadOnly] public int3 chunkSize;
 
             [WriteOnly] public NativeArray<VoxelLight> lightDatas;
             
@@ -112,9 +112,9 @@ namespace OptIn.Voxel
             }
         }
         
-        public static NativeArray<VoxelLight> GenerateLightData(NativeArray<Voxel> voxels, int chunkSize)
+        public static NativeArray<VoxelLight> GenerateLightData(NativeArray<Voxel> voxels, int3 chunkSize)
         {
-            NativeArray<VoxelLight> nativeLightData = new NativeArray<VoxelLight>(chunkSize * chunkSize * chunkSize, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+            NativeArray<VoxelLight> nativeLightData = new NativeArray<VoxelLight>(chunkSize.x * chunkSize.y * chunkSize.z, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
 
             VoxelAOJob aoJob = new VoxelAOJob
             {

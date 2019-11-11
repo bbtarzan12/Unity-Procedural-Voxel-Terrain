@@ -257,7 +257,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   target: {fileID: 943826111}
-  chunkSize: 32
+  chunkSize: {x: 32, y: 32, z: 32}
   chunkSpawnSize: {x: 3, y: 2, z: 3}
   chunkMaterial: {fileID: 2100000, guid: 0fbb6114864c2014b87fc493434a98af, type: 2}
   maxGenerateChunksInFrame: 3
@@ -286,7 +286,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 943826110}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalPosition: {x: 0, y: 20, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_Children: []
   m_Father: {fileID: 0}

@@ -35,10 +35,10 @@ namespace OptIn.Voxel
             public JobHandle jobHandle;
             NativeCounter counter;
 
-            public NativeMeshData(int chunkSize)
+            public NativeMeshData(int3 chunkSize)
             {
-                int maxVertices = 12 * chunkSize * chunkSize * chunkSize;
-                int maxIndices = 18 * chunkSize * chunkSize * chunkSize;
+                int maxVertices = 12 * chunkSize.x * chunkSize.y * chunkSize.z;
+                int maxIndices = 18 * chunkSize.x * chunkSize.y * chunkSize.z;
                 
                 nativeVertices = new NativeArray<float3>(maxVertices, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
                 nativeNormals = new NativeArray<float3>(maxVertices, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
@@ -78,7 +78,7 @@ namespace OptIn.Voxel
                     nativeLightData.Dispose();
             }
 
-            public void ScheduleMeshingJob(NativeArray<Voxel> voxels, int chunkSize, SimplifyingMethod method)
+            public void ScheduleMeshingJob(NativeArray<Voxel> voxels, int3 chunkSize, SimplifyingMethod method)
             {
                 nativeLightData = VoxelLightBuilder.GenerateLightData(voxels, chunkSize);
                 switch (method)
@@ -106,7 +106,7 @@ namespace OptIn.Voxel
                 indicesSize = counter.Count * 6;
             }
 
-            void ScheduleCullingJob(NativeArray<Voxel> voxels, int chunkSize)
+            void ScheduleCullingJob(NativeArray<Voxel> voxels, int3 chunkSize)
             {
                 VoxelCullingJob voxelCullingJob = new VoxelCullingJob
                 {
@@ -125,7 +125,7 @@ namespace OptIn.Voxel
                 JobHandle.ScheduleBatchedJobs();
             }
 
-            void ScheduleGreedyOnlyHeightJob(NativeArray<Voxel> voxels, int chunkSize)
+            void ScheduleGreedyOnlyHeightJob(NativeArray<Voxel> voxels, int3 chunkSize)
             {
                 VoxelGreedyMeshingOnlyHeightJob voxelMeshingOnlyHeightJob = new VoxelGreedyMeshingOnlyHeightJob
                 {
@@ -144,7 +144,7 @@ namespace OptIn.Voxel
                 JobHandle.ScheduleBatchedJobs();
             }
 
-            void ScheduleGreedyJob(NativeArray<Voxel> voxels, int chunkSize)
+            void ScheduleGreedyJob(NativeArray<Voxel> voxels, int3 chunkSize)
             {
                 VoxelGreedyMeshingJob voxelMeshingOnlyHeightJob = new VoxelGreedyMeshingJob
                 {
@@ -168,7 +168,7 @@ namespace OptIn.Voxel
         struct VoxelCullingJob : IJobParallelFor
         {
             [ReadOnly] public NativeArray<Voxel> voxels;
-            [ReadOnly] public int chunkSize;
+            [ReadOnly] public int3 chunkSize;
             [ReadOnly] public NativeArray<VoxelLight> lightData;
 
             [NativeDisableParallelForRestriction] [WriteOnly]
@@ -212,7 +212,7 @@ namespace OptIn.Voxel
         struct VoxelGreedyMeshingOnlyHeightJob : IJob
         {
             [ReadOnly] public NativeArray<Voxel> voxels;
-            [ReadOnly] public int chunkSize;
+            [ReadOnly] public int3 chunkSize;
             [ReadOnly] public NativeArray<VoxelLight> lightData;
 
             [NativeDisableParallelForRestriction] [WriteOnly]
@@ -236,11 +236,11 @@ namespace OptIn.Voxel
             {
                 for (int direction = 0; direction < 6; direction++)
                 {
-                    for (int depth = 0; depth < chunkSize; depth++)
+                    for (int depth = 0; depth < chunkSize[VoxelUtil.DirectionAlignedZ[direction]]; depth++)
                     {
-                        for (int x = 0; x < chunkSize; x++)
+                        for (int x = 0; x < chunkSize[VoxelUtil.DirectionAlignedX[direction]]; x++)
                         {
-                            for (int y = 0; y < chunkSize;)
+                            for (int y = 0; y < chunkSize[VoxelUtil.DirectionAlignedY[direction]];)
                             {
                                 int3 gridPosition = new int3
                                 {
@@ -269,7 +269,7 @@ namespace OptIn.Voxel
                                 }
 
                                 int height;
-                                for (height = 1; height + y < chunkSize; height++)
+                                for (height = 1; height + y < chunkSize[VoxelUtil.DirectionAlignedY[direction]]; height++)
                                 {
                                     int3 nextPosition = gridPosition;
                                     nextPosition[VoxelUtil.DirectionAlignedY[direction]] += height;
@@ -299,7 +299,7 @@ namespace OptIn.Voxel
         struct VoxelGreedyMeshingJob : IJob
         {
             [ReadOnly] public NativeArray<Voxel> voxels;
-            [ReadOnly] public int chunkSize;
+            [ReadOnly] public int3 chunkSize;
             [ReadOnly] public NativeArray<VoxelLight> lightData;
 
             [NativeDisableParallelForRestriction] [WriteOnly]
@@ -323,15 +323,14 @@ namespace OptIn.Voxel
 
             public void Execute()
             {
-                NativeHashMap<int3, Empty> hashMap = new NativeHashMap<int3, Empty>(chunkSize * chunkSize, Allocator.Temp);
-                
                 for (int direction = 0; direction < 6; direction++)
                 {
-                    for (int depth = 0; depth < chunkSize; depth++)
+                    NativeHashMap<int3, Empty> hashMap = new NativeHashMap<int3, Empty>(chunkSize[VoxelUtil.DirectionAlignedX[direction]] * chunkSize[VoxelUtil.DirectionAlignedY[direction]], Allocator.Temp);
+                    for (int depth = 0; depth < chunkSize[VoxelUtil.DirectionAlignedZ[direction]]; depth++)
                     {
-                        for (int x = 0; x < chunkSize; x++)
+                        for (int x = 0; x < chunkSize[VoxelUtil.DirectionAlignedX[direction]]; x++)
                         {
-                            for (int y = 0; y < chunkSize;)
+                            for (int y = 0; y < chunkSize[VoxelUtil.DirectionAlignedY[direction]];)
                             {
                                 int3 gridPosition = new int3 {[VoxelUtil.DirectionAlignedX[direction]] = x, [VoxelUtil.DirectionAlignedY[direction]] = y, [VoxelUtil.DirectionAlignedZ[direction]] = depth};
 
@@ -362,7 +361,7 @@ namespace OptIn.Voxel
                                 hashMap.TryAdd(gridPosition, new Empty());
 
                                 int height;
-                                for (height = 1; height + y < chunkSize; height++)
+                                for (height = 1; height + y < chunkSize[VoxelUtil.DirectionAlignedY[direction]]; height++)
                                 {
                                     int3 nextPosition = gridPosition;
                                     nextPosition[VoxelUtil.DirectionAlignedY[direction]] += height;
@@ -384,7 +383,7 @@ namespace OptIn.Voxel
 
                                 bool isDone = false;
                                 int width;
-                                for (width = 1; width + x < chunkSize; width++)
+                                for (width = 1; width + x < chunkSize[VoxelUtil.DirectionAlignedX[direction]]; width++)
                                 {
                                     for (int dy = 0; dy < height; dy++)
                                     {
@@ -423,20 +422,14 @@ namespace OptIn.Voxel
                         
                         hashMap.Clear();
                     }
+                    hashMap.Dispose();
                 }
-
-                hashMap.Dispose();
             }
         }
 
-        static bool BoundaryCheck(int chunkSize, int3 position)
+        public static bool TransparencyCheck(NativeArray<Voxel> voxels, int3 position, int3 chunkSize)
         {
-            return chunkSize > position.x && chunkSize > position.y && chunkSize > position.z && position.x >= 0 && position.y >= 0 && position.z >= 0;
-        }
-
-        public static bool TransparencyCheck(NativeArray<Voxel> voxels, int3 position, int chunkSize)
-        {
-            if (!BoundaryCheck(chunkSize, position))
+            if (!VoxelUtil.BoundaryCheck(chunkSize, position))
                 return false;    
 
             return voxels[VoxelUtil.To1DIndex(position, chunkSize)].data != Voxel.VoxelType.Air;

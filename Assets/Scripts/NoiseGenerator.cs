@@ -37,7 +37,7 @@ public static class NoiseGenerator
     struct GenerateNoiseJob : IJobParallelFor
     {
         [ReadOnly] public int3 chunkPosition;
-        [ReadOnly] public int chunkSize;
+        [ReadOnly] public int3 chunkSize;
         
         [WriteOnly] public NativeArray<Voxel> voxels;
 
@@ -50,7 +50,7 @@ public static class NoiseGenerator
         }
     }
     
-    public static JobHandle Generate(NativeArray<Voxel>voxels, int3 chunkPosition, int chunkSize)
+    public static JobHandle Generate(NativeArray<Voxel>voxels, int3 chunkPosition, int3 chunkSize)
     {
         GenerateNoiseJob noiseJob = new GenerateNoiseJob {chunkPosition = chunkPosition, chunkSize = chunkSize, voxels = voxels};
         JobHandle noiseJobHandle = noiseJob.Schedule(voxels.Length, 32);

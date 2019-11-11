@@ -5,32 +5,32 @@ namespace OptIn.Voxel
 {
     public static class VoxelUtil
     {
-        public static int3 To3DIndex(int index, int chunkSize)
+        public static int3 To3DIndex(int index, int3 chunkSize)
         {
-            return new int3 {z = index % chunkSize, y = (index / chunkSize) % chunkSize, x = index / (chunkSize * chunkSize)};
+            return new int3 {z = index % chunkSize.z, y = (index / chunkSize.z) % chunkSize.y, x = index / (chunkSize.y * chunkSize.z)};
         }
 
-        public static int To1DIndex(int3 index, int chunkSize)
+        public static int To1DIndex(int3 index, int3 chunkSize)
         {
-            return index.z + index.y * chunkSize + index.x * chunkSize * chunkSize;
+            return index.z + index.y * chunkSize.z + index.x * chunkSize.y * chunkSize.z;
         }
 
-        public static int To1DIndex(Vector3Int index, int chunkSize)
+        public static int To1DIndex(Vector3Int index, Vector3Int chunkSize)
         {
-            return To1DIndex(new int3(index.x, index.y, index.z), chunkSize);
+            return To1DIndex(new int3(index.x, index.y, index.z), new int3(chunkSize.x, chunkSize.y, chunkSize.z));
         }
 
-        public static Vector3Int WorldToChunk(Vector3 worldPosition, int chunkSize)
+        public static Vector3Int WorldToChunk(Vector3 worldPosition, Vector3Int chunkSize)
         {
-            return new Vector3Int {x = Mathf.FloorToInt(worldPosition.x / chunkSize), y = Mathf.FloorToInt(worldPosition.y / chunkSize), z = Mathf.FloorToInt(worldPosition.z / chunkSize)};
+            return new Vector3Int {x = Mathf.FloorToInt(worldPosition.x / chunkSize.x), y = Mathf.FloorToInt(worldPosition.y / chunkSize.y), z = Mathf.FloorToInt(worldPosition.z / chunkSize.z)};
         }
 
-        public static Vector3 ChunkToWorld(Vector3Int chunkPosition, int chunkSize)
+        public static Vector3 ChunkToWorld(Vector3Int chunkPosition, Vector3Int chunkSize)
         {
             return chunkPosition * chunkSize;
         }
 
-        public static Vector3 GridToWorld(Vector3Int gridPosition, Vector3Int chunkPosition, int chunkSize)
+        public static Vector3 GridToWorld(Vector3Int gridPosition, Vector3Int chunkPosition, Vector3Int chunkSize)
         {
             return ChunkToWorld(chunkPosition, chunkSize) + gridPosition;
         }
@@ -45,14 +45,14 @@ namespace OptIn.Voxel
             };
         }
         
-        public static bool BoundaryCheck(int chunkSize, int3 position)
+        public static bool BoundaryCheck(int3 chunkSize, int3 position)
         {
-            return chunkSize > position.x && chunkSize > position.y && chunkSize > position.z && position.x >= 0 && position.y >= 0 && position.z >= 0;
+            return chunkSize.x > position.x && chunkSize.y > position.y && chunkSize.z > position.z && position.x >= 0 && position.y >= 0 && position.z >= 0;
         }
         
-        public static bool BoundaryCheck(int chunkSize, Vector3Int position)
+        public static bool BoundaryCheck(Vector3Int chunkSize, Vector3Int position)
         {
-            return chunkSize > position.x && chunkSize > position.y && chunkSize > position.z && position.x >= 0 && position.y >= 0 && position.z >= 0;
+            return chunkSize.x > position.x && chunkSize.y > position.y && chunkSize.z > position.z && position.x >= 0 && position.y >= 0 && position.z >= 0;
         }
 
         public static Vector3 ToVector3(int3 v) => new Vector3(v.x, v.y, v.z);
