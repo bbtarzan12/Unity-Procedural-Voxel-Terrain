@@ -1,3 +1,4 @@
+using System.Collections;
 using OptIn.Voxel;
 using OptIn.Voxel.Utils;
 using Unity.Burst;
@@ -11,7 +12,8 @@ public static class NoiseGenerator
     static void RandomVoxel(out Voxel voxel, int3 worldPosition)
     {
         voxel = new Voxel();
-        int density = -worldPosition.y;
+        int density = -worldPosition.y + 64;
+
         density += (int)(SimplexNoise.Noise.CalcPixel2DFractal(worldPosition.x, worldPosition.z, 0.003f, 1) * 25f);
         density += (int)(SimplexNoise.Noise.CalcPixel2DFractal(worldPosition.x, worldPosition.z, 0.03f, 3) * 5f);
         density += (int)(SimplexNoise.Noise.CalcPixel2DFractal(worldPosition.x, worldPosition.z, 0.09f, 5) * 1f);
@@ -45,19 +47,56 @@ public static class NoiseGenerator
         {
             int3 gridPosition = VoxelUtil.To3DIndex(index, chunkSize);
             int3 worldPosition = gridPosition + chunkPosition * chunkSize;
+            
             RandomVoxel(out Voxel voxel, worldPosition);
+
             voxels[index] = voxel;
         }
     }
-    
-    public static JobHandle Generate(NativeArray<Voxel>voxels, int3 chunkPosition, int3 chunkSize)
-    {
-        GenerateNoiseJob noiseJob = new GenerateNoiseJob {chunkPosition = chunkPosition, chunkSize = chunkSize, voxels = voxels};
-        JobHandle noiseJobHandle = noiseJob.Schedule(voxels.Length, 32);
-        JobHandle.ScheduleBatchedJobs();
 
-        return noiseJobHandle;
+    public class NativeVoxelData
+    {
+        NativeArray<Voxel> nativeVoxels;
+        public JobHandle jobHandle;
+
+        public NativeVoxelData(int3 chunkSize)
+        {
+            int numVoxels = chunkSize.x * chunkSize.y * chunkSize.z;
+            nativeVoxels = new NativeArray<Voxel>(numVoxels, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+            
+        }
+
+        ~NativeVoxelData()
+        {
+            jobHandle.Complete();
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (nativeVoxels.IsCreated)
+                nativeVoxels.Dispose();
+        }
+        
+        public IEnumerator Generate(Voxel[] voxels, int3 chunkPosition, int3 chunkSize)
+        {
+            nativeVoxels.CopyFrom(voxels);
+
+            GenerateNoiseJob noiseJob = new GenerateNoiseJob {chunkPosition = chunkPosition, chunkSize = chunkSize, voxels = nativeVoxels};
+            jobHandle = noiseJob.Schedule(nativeVoxels.Length, 32);
+            JobHandle.ScheduleBatchedJobs();
+            int frameCount = 1;
+            yield return new WaitUntil(() =>
+            {
+                frameCount++;
+                return jobHandle.IsCompleted || frameCount >= 4;
+            });        
+            jobHandle.Complete();
+        
+            nativeVoxels.CopyTo(voxels);
+            nativeVoxels.Dispose();
+        }
     }
-    
-    
+
+
 }

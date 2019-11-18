@@ -30,7 +30,7 @@ namespace OptIn.Voxel.Utils
             NoAllocHelpers.ResizeList(list, newLength);
         }
 
-        public static unsafe void ManagedToNative<T>(this NativeArray<T> nativeArray, T[,,] array) where T : unmanaged
+        public static unsafe void ManagedToNative<T>(this NativeArray<T> nativeArray, T[] array) where T : unmanaged
         {
             fixed (void* voxelPointer = array)
             {
@@ -38,7 +38,7 @@ namespace OptIn.Voxel.Utils
             }
         }
 
-        public static unsafe void NativeToManaged<T>(this T[,,] array, NativeArray<T> nativeArray) where T : unmanaged
+        public static unsafe void NativeToManaged<T>(this T[] array, NativeArray<T> nativeArray) where T : unmanaged
         {
             fixed (void* voxelPointer = array)
             {

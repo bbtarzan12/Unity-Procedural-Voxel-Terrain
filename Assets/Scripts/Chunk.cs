@@ -1,11 +1,9 @@
-﻿﻿using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using OptIn.Voxel;
-using Unity.Collections;
-using Unity.Jobs;
- using Unity.Mathematics;
- using UnityEngine;
+using Unity.Mathematics;
+using UnityEngine;
 using UnityEngine.Rendering;
 
 [RequireComponent(typeof(MeshRenderer))]
@@ -19,8 +17,9 @@ public class Chunk : MonoBehaviour
     
     bool initialized;
     bool dirty;
-    bool isUpdating;
-    NativeArray<Voxel> voxels;
+    bool argent;
+    Voxel[] voxels;
+    Coroutine meshUpdator;
 
     // Mesh
     Mesh mesh;
@@ -28,10 +27,16 @@ public class Chunk : MonoBehaviour
     MeshRenderer meshRenderer;
     MeshCollider meshCollider;
 
+    public event Func<bool> CanUpdate;
+
+    NoiseGenerator.NativeVoxelData voxelData;
+    VoxelLightBuilder.NativeLightData lightData;
     VoxelMeshBuilder.NativeMeshData meshData;
-    JobHandle noiseJobHandle;
 
     public bool Dirty => dirty;
+    public bool Updating => meshUpdator != null;
+    public bool Initialized => initialized;
+    public Voxel[] Voxels => voxels;
 
     void Awake()
     {
@@ -39,16 +44,17 @@ public class Chunk : MonoBehaviour
         meshRenderer = GetComponent<MeshRenderer>();
         meshCollider = GetComponent<MeshCollider>();
         mesh = new Mesh {indexFormat = IndexFormat.UInt32};
-
-        VoxelMeshBuilder.InitializeShaderParameter();
+        CanUpdate = () => true;
     }
 
     void OnDestroy()
     {
-        noiseJobHandle.Complete();
+        voxelData?.jobHandle.Complete();
+        voxelData?.Dispose();
         meshData?.jobHandle.Complete();
         meshData?.Dispose();
-        voxels.Dispose();
+        lightData?.jobHandle.Complete();
+        lightData?.Dispose();
     }
 
     void Start()
@@ -56,7 +62,7 @@ public class Chunk : MonoBehaviour
         meshFilter.mesh = mesh;
     }
     
-    public IEnumerator Init(Vector3Int position, TerrainGenerator parent)
+    public void Init(Vector3Int position, TerrainGenerator parent)
     {
         chunkPosition = position;
         generator = parent;
@@ -64,23 +70,57 @@ public class Chunk : MonoBehaviour
         meshRenderer.material = generator.ChunkMaterial;
         chunkSize = generator.ChunkSize;
 
-        voxels = new NativeArray<Voxel>(chunkSize.x * chunkSize.y * chunkSize.z, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
-        noiseJobHandle = NoiseGenerator.Generate(voxels, VoxelUtil.ToInt3(chunkPosition), VoxelUtil.ToInt3(chunkSize));
-        yield return new WaitUntil(() => noiseJobHandle.IsCompleted);
-        noiseJobHandle.Complete();
+        StartCoroutine(nameof(InitUpdator));
+    }
+
+    IEnumerator InitUpdator()
+    {
+        int numVoxels = chunkSize.x * chunkSize.y * chunkSize.z;
+        voxels =  new Voxel[numVoxels];
+        voxelData = new NoiseGenerator.NativeVoxelData(VoxelUtil.ToInt3(chunkSize));
+        yield return voxelData.Generate(voxels, VoxelUtil.ToInt3(chunkPosition), VoxelUtil.ToInt3(chunkSize));
         dirty = true;
         initialized = true;
     }
 
-    void LateUpdate()
+    void Update()
     {
-        if (isUpdating == false)
-            return;
-
-        if (meshData == null)
+        if (!initialized)
             return;
         
-        meshData.CompleteMeshingJob(out int verticeSize, out int indicesSize);
+        if (Updating)
+            return;
+
+        if (!dirty)
+            return;
+
+        if (CanUpdate == null || !CanUpdate())
+            return;
+
+        meshUpdator = StartCoroutine(nameof(UpdateMesh));
+    }
+
+    IEnumerator UpdateMesh()
+    {
+        if(Updating)
+            yield break;
+
+        if (!generator.CanUpdate)yield break;
+
+        generator.UpdatingChunks++;
+        
+        int3 chunkSizeInt3 = VoxelUtil.ToInt3(chunkSize);
+
+        List<Voxel[]> neighborVoxels = generator.GetNeighborVoxels(chunkPosition, 1);
+        
+        lightData?.Dispose();
+        lightData = new VoxelLightBuilder.NativeLightData(chunkSizeInt3);
+        yield return lightData.ScheduleLightingJob(neighborVoxels, VoxelUtil.ToInt3(chunkPosition), chunkSizeInt3, 1, argent);
+        meshData?.Dispose();
+        meshData = new VoxelMeshBuilder.NativeMeshData(VoxelUtil.ToInt3(chunkSize));
+        yield return meshData.ScheduleMeshingJob(voxels, lightData, VoxelUtil.ToInt3(chunkSize), generator.SimplifyingMethod, argent);
+        
+        meshData.GetMeshInformation(out int verticeSize, out int indicesSize);
         
         if (verticeSize > 0 && indicesSize > 0)
         {
@@ -94,26 +134,27 @@ public class Chunk : MonoBehaviour
             mesh.RecalculateNormals();
             mesh.RecalculateBounds();
             
-            meshCollider.sharedMesh = mesh;
+            if(argent)
+                SetSharedMesh(mesh);
+            else
+                VoxelColliderBuilder.Instance.Enqueue(this, mesh);
         }
         
+        lightData.Dispose();
         meshData.Dispose();
-        isUpdating = false;
-    }
-
-    public void UpdateMesh()
-    {
-        if (dirty == false)
-            return;
-
-        meshData?.Dispose();
-        meshData = new VoxelMeshBuilder.NativeMeshData(VoxelUtil.ToInt3(chunkSize));
-        meshData.ScheduleMeshingJob(voxels, VoxelUtil.ToInt3(chunkSize), generator.SimplifyingMethod);
-        
-        isUpdating = true;
         dirty = false;
+        argent = false;
+        gameObject.layer = LayerMask.NameToLayer("Voxel");
+        meshUpdator = null;
+
+        generator.UpdatingChunks--;
     }
-    
+
+    public void SetSharedMesh(Mesh bakedMesh)
+    {
+        meshCollider.sharedMesh = bakedMesh;
+    }
+
     public bool GetVoxel(Vector3Int gridPosition, out Voxel voxel)
     {
         if (!initialized)
@@ -122,7 +163,7 @@ public class Chunk : MonoBehaviour
             return false;
         }
         
-        if (!VoxelUtil.BoundaryCheck(chunkSize, gridPosition))
+        if (!VoxelUtil.BoundaryCheck(gridPosition, chunkSize))
         {
             voxel = Voxel.Empty;
             return false;
@@ -130,5 +171,37 @@ public class Chunk : MonoBehaviour
 
         voxel = voxels[VoxelUtil.To1DIndex(gridPosition, chunkSize)];
         return true;
+    }
+
+    public bool SetVoxel(Vector3Int gridPosition, Voxel.VoxelType type)
+    {
+        if (!initialized)
+        {
+            return false;
+        }
+        
+        if (!VoxelUtil.BoundaryCheck(gridPosition, chunkSize))
+        {
+            return false;
+        }
+
+        voxels[VoxelUtil.To1DIndex(gridPosition, chunkSize)] = new Voxel { data = type};
+        dirty = true;
+        argent = true;
+        return true;
+    }
+
+    void OnDrawGizmos()
+    {
+        if (!initialized)
+        {
+            Gizmos.color = Color.yellow;
+            Gizmos.DrawWireCube(transform.position + new Vector3(chunkSize.x / 2f, chunkSize.y / 2f, chunkSize.z / 2f), chunkSize);
+        }
+        else if (initialized && dirty)
+        {
+            Gizmos.color = Color.white;
+            Gizmos.DrawWireCube(transform.position + new Vector3(chunkSize.x / 2f, chunkSize.y / 2f, chunkSize.z / 2f), chunkSize);
+        }
     }
 }

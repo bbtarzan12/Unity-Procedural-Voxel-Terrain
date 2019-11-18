@@ -20,9 +20,24 @@ namespace OptIn.Voxel
             return To1DIndex(new int3(index.x, index.y, index.z), new int3(chunkSize.x, chunkSize.y, chunkSize.z));
         }
 
+        public static int3 WorldToChunk(int3 worldGridPosition, int3 chunkSize)
+        {
+            return new int3
+            {
+                x = worldGridPosition.x / chunkSize.x,
+                y = worldGridPosition.y / chunkSize.y,
+                z = worldGridPosition.z / chunkSize.z
+            };
+        }
+
         public static Vector3Int WorldToChunk(Vector3 worldPosition, Vector3Int chunkSize)
         {
-            return new Vector3Int {x = Mathf.FloorToInt(worldPosition.x / chunkSize.x), y = Mathf.FloorToInt(worldPosition.y / chunkSize.y), z = Mathf.FloorToInt(worldPosition.z / chunkSize.z)};
+            return new Vector3Int
+            {
+                x = Mathf.FloorToInt(worldPosition.x / chunkSize.x),
+                y = Mathf.FloorToInt(worldPosition.y / chunkSize.y),
+                z = Mathf.FloorToInt(worldPosition.z / chunkSize.z)
+            };
         }
 
         public static Vector3 ChunkToWorld(Vector3Int chunkPosition, Vector3Int chunkSize)
@@ -35,29 +50,30 @@ namespace OptIn.Voxel
             return ChunkToWorld(chunkPosition, chunkSize) + gridPosition;
         }
         
-        public static Vector3Int WorldToGrid(Vector3 worldPosition)
+        public static Vector3Int WorldToGrid(Vector3 worldPosition, Vector3Int chunkPosition, Vector3Int chunkSize)
         {
-            return new Vector3Int
-            {
-                x = Mathf.RoundToInt(worldPosition.x),
-                y = Mathf.RoundToInt(worldPosition.y),
-                z = Mathf.RoundToInt(worldPosition.z)
-            };
+            return ToVector3Int(WorldToGrid(ToInt3(worldPosition), ToInt3(chunkPosition), ToInt3(chunkSize)));
         }
-        
-        public static bool BoundaryCheck(int3 chunkSize, int3 position)
+
+        public static int3 WorldToGrid(int3 worldGridPosition, int3 chunkPosition, int3 chunkSize)
+        {
+            return Mod(worldGridPosition - chunkPosition * chunkSize, chunkSize);
+        }
+
+        public static bool BoundaryCheck(int3 position, int3 chunkSize)
         {
             return chunkSize.x > position.x && chunkSize.y > position.y && chunkSize.z > position.z && position.x >= 0 && position.y >= 0 && position.z >= 0;
         }
         
-        public static bool BoundaryCheck(Vector3Int chunkSize, Vector3Int position)
+        public static bool BoundaryCheck(Vector3Int position, Vector3Int chunkSize)
         {
             return chunkSize.x > position.x && chunkSize.y > position.y && chunkSize.z > position.z && position.x >= 0 && position.y >= 0 && position.z >= 0;
         }
 
-        public static Vector3 ToVector3(int3 v) => new Vector3(v.x, v.y, v.z);
+        public static Vector3Int ToVector3Int(int3 v) => new Vector3Int(v.x, v.y, v.z);
 
         public static int3 ToInt3(Vector3Int v) => new int3(v.x, v.y, v.z);
+        public static int3 ToInt3(Vector3 v) => new int3((int)v.x, (int)v.y, (int)v.z);
 
         public static int InvertDirection(int direction)
         {
@@ -77,15 +93,26 @@ namespace OptIn.Voxel
             return invDirection;
         }
         
-        public static int Mod(int x, int m) 
+        public static int Mod(int v, int m) 
         {
-            int r = x%m;
+            int r = v%m;
             return r<0 ? r+m : r;
+        }
+
+        public static int3 Mod(int3 v, int3 m)
+        {
+            return new int3
+            {
+                x = Mod(v.x, m.x),
+                y = Mod(v.y, m.y),
+                z = Mod(v.z, m.z)
+            };
         }
         
         public static readonly int[] DirectionAlignedX = { 2, 2, 0, 0, 0, 0 };
         public static readonly int[] DirectionAlignedY = { 1, 1, 2, 2, 1, 1 };
         public static readonly int[] DirectionAlignedZ = { 0, 0, 1, 1, 2, 2 };
+        public static readonly int[] DirectionAlignedSign = { 1, -1, 1, -1, 1, -1 };
 
         public static readonly int3[] VoxelDirectionOffsets =
         {
@@ -99,61 +126,61 @@ namespace OptIn.Voxel
 
         public static readonly float3[] CubeVertices =
         {
-            new float3(0, 0, 0),
-            new float3(1, 0, 0),
-            new float3(1, 0, 1),
-            new float3(0, 0, 1), 
-            new float3(0, 1, 0), 
-            new float3(1, 1, 0),
-            new float3(1, 1, 1),
-            new float3(0, 1, 1)
+            new float3(0f, 0f, 0f),
+            new float3(1f, 0f, 0f),
+            new float3(1f, 0f, 1f),
+            new float3(0f, 0f, 1f), 
+            new float3(0f, 1f, 0f), 
+            new float3(1f, 1f, 0f),
+            new float3(1f, 1f, 1f),
+            new float3(0f, 1f, 1f)
         };
 
         public static readonly int[] CubeFaces =
         {
             1, 2, 5, 6, // right
-            3, 0, 7, 4, // left
+            0, 3, 4, 7, // left
             4, 5, 7, 6, // top
-            1, 0, 2, 3, // bottom
-            2, 3, 6, 7, // front
+            0, 1, 3, 2, // bottom
+            3, 2, 7, 6, // front
             0, 1, 4, 5, // back
         };
 
         public static readonly float2[] CubeUVs =
         {
-            new float2(0, 0), new float2(1.0f, 0), new float2(0, 1.0f), new float2(1.0f, 1.0f)    
+            new float2(0f, 0f), new float2(1.0f, 0f), new float2(0f, 1.0f), new float2(1.0f, 1.0f)    
         };
 
         public static readonly int[] CubeIndices =
         {
             0, 3, 1, 
             0, 2, 3, //face right
-            0, 2, 1, 
-            1, 2, 3, //face left
+            1, 3, 0, 
+            3, 2, 0, //face left
             0, 3, 1, 
             0, 2, 3, //face top
-            0, 2, 1, 
-            1, 2, 3, //face bottom
-            0, 3, 1,                        
-            0, 2, 3, //face front
-            0, 2, 1, 
-            1, 2, 3, //face back
+            1, 3, 0, 
+            3, 2, 0, //face bottom
+            1, 3, 0,                        
+            3, 2, 0, //face front
+            0, 3, 1, 
+            0, 2, 3, //face back
         };
         
         public static readonly int[] CubeFlipedIndices =
         {
             0, 2, 1, 
             1, 2, 3, //face right
-            0, 3, 1, 
-            0, 2, 3, //face left
+            1, 2, 0, 
+            3, 2, 1, //face left
             0, 2, 1, 
             1, 2, 3, //face top
-            0, 3, 1, 
-            0, 2, 3, //face bottom
-            0, 2, 1,                        
-            1, 2, 3, //face front
-            0, 3, 1, 
-            0, 2, 3, //face back
+            1, 2, 0, 
+            3, 2, 1, //face bottom
+            1, 2, 0,                        
+            3, 2, 1, //face front
+            0, 2, 1, 
+            1, 2, 3, //face back
         };
         
         public static readonly int[] AONeighborOffsets =

@@ -5,6 +5,7 @@
 // Based on work by Heikki Törmälä (2012) and Stefan Gustavson (2006).
 
 using System;
+using Unity.Mathematics;
 
 namespace SimplexNoise
 {
@@ -75,17 +76,17 @@ namespace SimplexNoise
         
         public static float CalcPixel1D(float x, float scale)
         {
-            return Generate(x * scale) + 1 * 0.5f;
+            return (Generate(x * scale) + 1) * 0.5f;
         }
 
         public static float CalcPixel2D(float x, float y, float scale)
         {
-            return Generate(x * scale, y * scale) + 1 * 0.5f;
+            return (Generate(x * scale, y * scale) + 1) * 0.5f;
         }
 
         public static float CalcPixel3D(float x, float y, float z, float scale)
         {
-            return Generate(x * scale, y * scale, z * scale) + 1 * 0.5f;
+            return (Generate(x * scale, y * scale, z * scale) + 1) * 0.5f;
         }
 
         private static int _seed;
