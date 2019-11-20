@@ -105,7 +105,8 @@ public class Chunk : MonoBehaviour
         if(Updating)
             yield break;
 
-        if (!generator.CanUpdate)yield break;
+        if (!generator.CanUpdate)
+            yield break;
 
         generator.UpdatingChunks++;
         
@@ -146,7 +147,6 @@ public class Chunk : MonoBehaviour
         argent = false;
         gameObject.layer = LayerMask.NameToLayer("Voxel");
         meshUpdator = null;
-
         generator.UpdatingChunks--;
     }
 
@@ -185,10 +185,16 @@ public class Chunk : MonoBehaviour
             return false;
         }
 
-        voxels[VoxelUtil.To1DIndex(gridPosition, chunkSize)] = new Voxel { data = type};
+        voxels[VoxelUtil.To1DIndex(gridPosition, chunkSize)].data = type;
         dirty = true;
         argent = true;
         return true;
+    }
+
+    public void NeighborChunkIsChanged()
+    {
+        dirty = true;
+        argent = true;
     }
 
     void OnDrawGizmos()

@@ -10,7 +10,7 @@ public class VoxelController : MonoBehaviour
             Ray ray = Camera.main.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0));
             if (Physics.Raycast(ray, out RaycastHit hit, 100f, 1 << LayerMask.NameToLayer("Voxel")))
             {
-                //TerrainGenerator.Instance.SetVoxel(hit.point - ray.direction * 0.01f, Voxel.VoxelType.Stone);
+                TerrainGenerator.Instance.SetVoxel(hit.point - ray.direction * 0.01f, Voxel.VoxelType.Stone);
             }
         }
         
@@ -19,7 +19,7 @@ public class VoxelController : MonoBehaviour
             Ray ray = Camera.main.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0));
             if (Physics.Raycast(ray, out RaycastHit hit, 100f, 1 << LayerMask.NameToLayer("Voxel")))
             {
-                //TerrainGenerator.Instance.SetVoxel(hit.point + ray.direction * 0.01f, Voxel.VoxelType.Air);
+                TerrainGenerator.Instance.SetVoxel(hit.point + ray.direction * 0.01f, Voxel.VoxelType.Air);
             }
         }
     }

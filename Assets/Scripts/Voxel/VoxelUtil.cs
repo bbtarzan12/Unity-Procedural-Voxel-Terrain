@@ -24,9 +24,9 @@ namespace OptIn.Voxel
         {
             return new int3
             {
-                x = worldGridPosition.x / chunkSize.x,
-                y = worldGridPosition.y / chunkSize.y,
-                z = worldGridPosition.z / chunkSize.z
+                x = Floor((float)worldGridPosition.x / chunkSize.x),
+                y = Floor((float)worldGridPosition.y / chunkSize.y),
+                z = Floor((float)worldGridPosition.z / chunkSize.z)
             };
         }
 
@@ -34,9 +34,9 @@ namespace OptIn.Voxel
         {
             return new Vector3Int
             {
-                x = Mathf.FloorToInt(worldPosition.x / chunkSize.x),
-                y = Mathf.FloorToInt(worldPosition.y / chunkSize.y),
-                z = Mathf.FloorToInt(worldPosition.z / chunkSize.z)
+                x = Floor(worldPosition.x / chunkSize.x),
+                y = Floor(worldPosition.y / chunkSize.y),
+                z = Floor(worldPosition.z / chunkSize.z)
             };
         }
 
@@ -73,7 +73,7 @@ namespace OptIn.Voxel
         public static Vector3Int ToVector3Int(int3 v) => new Vector3Int(v.x, v.y, v.z);
 
         public static int3 ToInt3(Vector3Int v) => new int3(v.x, v.y, v.z);
-        public static int3 ToInt3(Vector3 v) => new int3((int)v.x, (int)v.y, (int)v.z);
+        public static int3 ToInt3(Vector3 v) => Floor(v);
 
         public static int InvertDirection(int direction)
         {
@@ -106,6 +106,22 @@ namespace OptIn.Voxel
                 x = Mod(v.x, m.x),
                 y = Mod(v.y, m.y),
                 z = Mod(v.z, m.z)
+            };
+        }
+        
+        public static int Floor(float x)
+        {
+            int xi = (int)x;
+            return x < xi ? xi - 1 : xi;
+        }
+
+        public static int3 Floor(float3 v)
+        {
+            return new int3
+            {
+                x = Floor(v.x),
+                y = Floor(v.y),
+                z = Floor(v.z)
             };
         }
         

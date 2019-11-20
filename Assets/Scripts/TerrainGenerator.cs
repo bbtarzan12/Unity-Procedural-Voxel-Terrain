@@ -4,7 +4,7 @@ using OptIn.Voxel;
 using Priority_Queue;
 using UnityEngine;
 
-public class TerrainGenerator : MonoBehaviour
+public class TerrainGenerator : Singleton<TerrainGenerator>
 {
     [SerializeField] Transform target;
     [SerializeField] Vector3Int chunkSize = Vector3Int.one * 32;
@@ -132,6 +132,10 @@ public class TerrainGenerator : MonoBehaviour
                             return false;
                         }
                     }
+                    else
+                    {
+                        return false;
+                    }
                 }
             }
             return true;
@@ -179,10 +183,31 @@ public class TerrainGenerator : MonoBehaviour
             Vector3Int gridPosition = VoxelUtil.WorldToGrid(worldPosition, chunkPosition, chunkSize);
             if (chunk.SetVoxel(gridPosition, type))
             {
+                // Check Chunk Border
+                for (int x = -1; x <= 1; x++)
+                {
+                    for (int y = -1; y <= 1; y++)
+                    {
+                        for (int z = -1; z <= 1; z++)
+                        {
+                            if (VoxelUtil.BoundaryCheck(gridPosition + new Vector3Int(x, y, z), chunkSize))
+                                continue;
+
+                            Vector3Int neighborChunkPosition = VoxelUtil.WorldToChunk(worldPosition + new Vector3(x, y, z), chunkSize);
+                            if (chunkPosition == neighborChunkPosition)
+                                continue;
+                            
+                            if (chunks.TryGetValue(neighborChunkPosition, out Chunk neighborChunk))
+                            {
+                                neighborChunk.NeighborChunkIsChanged();
+                            }
+                        }
+                    }
+                }
+
                 return true;
             }
         }
-
         return false;
     }
 
